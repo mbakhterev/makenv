@@ -13,10 +13,10 @@ endif
 include $(foreign)/mkenv/$(toolchain).mk
 
 ifdef debug
-cflags += $(cdebug)
+copt = $(cdebug)
 lflags += $(ldebug)
 else
-cflags += $(coptimization)
+copt = $(coptimization)
 lflags += $(loptimization)
 endif
 
@@ -30,7 +30,7 @@ $(bld)/%.d: ./%.c
 
 $(bld)/%.o: ./%.c
 	@ echo -e '\tcc\t$<' \
-	&& $(cc) $(cflags) -o $@ $<
+	&& $(cc) $(cflags) $(copt) -o $@ $<
 
 c2o = $(addprefix $(1)/, $(patsubst %.c, %.o, $(2)))
 o2d = $(patsubst %.o, %.d, $(1))
