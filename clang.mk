@@ -4,6 +4,6 @@ cdebug = -g
 coptimization = -flto 
 
 lnk = clang -pipe
-lflags = -L .
+lflags =
 ldebug = -g
 loptimization = -flto -O4 -Wl,-s
