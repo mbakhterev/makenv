@@ -28,11 +28,6 @@ mkpath = \
  		|| { echo 'error: no build dir: $(1)' 1>&2; false; }; } \
  	&& { test -d $(2) || mkdir -p '$(2)'; }
 
-$(bld)/lib/%.a:
-	@ echo -e '\tlib\t$@' \
-	&& $(call mkpath,$(bld),$(@D)) \
-	&& $(ar) rc $@ $^
-
 $(bld)/bin/%:
 	@ echo -e '\tlnk\t$@' \
 	&& $(call mkpath,$(bld),$(@D)) \

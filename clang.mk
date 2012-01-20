@@ -7,5 +7,3 @@ lnk = clang -pipe
 lflags = -L .
 ldebug = -g
 loptimization = -flto -O4 -Wl,-s
-
-ar = llvm-ar
