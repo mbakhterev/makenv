@@ -1,7 +1,7 @@
 cc = gcc -std=c1x -Wall -Werror -pedantic -c -pipe
-cflags = -I .
+cflags =
 cdebug = -g
-coptimization = -flto 
+coptimization = -flto -O0
 
 lnk = gcc -pipe
 lflags =
