@@ -1,5 +1,5 @@
 cc = gcc -std=c1x -Wall -Werror -pedantic -c -pipe
-cflags =
+cflags = -I .
 cdebug = -g
 coptimization = -flto -O0
 
