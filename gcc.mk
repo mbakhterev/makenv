@@ -1,4 +1,4 @@
-cc = gcc -std=c1x -Wall -Werror -pedantic -c -pipe
+cc = gcc -Wall -Werror -pedantic -c -pipe
 cflags = -I .
 cdebug = -g
 coptimization = -flto -O0

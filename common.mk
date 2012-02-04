@@ -20,8 +20,9 @@ copt = $(coptimization)
 lflags += $(loptimization)
 endif
 
-c2o = $(addprefix $(1)/, $(patsubst %.c, %.o, $(2)))
-o2d = $(patsubst %.o, %.d, $(1))
+o2d = $(patsubst %.o,%.d,$(1))
+c2o = $(addprefix $(1)/, $(patsubst %.c,%.o,$(2)))
+cpp2o = $(addprefix $(1)/, $(patsubst %.cpp,%.o,$(2)))
 
 mkpath = \
 	{ test -d '$(1)' \
@@ -36,9 +37,19 @@ $(bld)/bin/%:
 $(bld)/%.d: %.c
 	@ echo -e '\tdep\t$<' \
 	&& $(call mkpath,$(bld),$(@D)) \
- 	&& $(cc) $(cflags) -MM $< \
+ 	&& $(cc) $(cflags) -x c -std=c1x -MM $< \
  		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
  
 $(bld)/%.o: %.c
 	@ echo -e '\tcc\t$<' \
-	&& $(cc) $(cflags) $(copt) -o $@ $<
+	&& $(cc) $(cflags) $(copt) -x c -std=c1x -o $@ $<
+
+$(bld)/%.d: %.cpp
+	@ echo -e '\tdep\t$<' \
+	&& $(call mkpath,$(bld),$(@D)) \
+ 	&& $(cc) $(cflags) -x c++ -std=c++0x -MM $< \
+ 		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
+ 
+$(bld)/%.o: %.cpp
+	@ echo -e '\tcc c++\t$<' \
+	&& $(cc) $(cflags) $(copt) -x c++ -std=c++0x -o $@ $<
