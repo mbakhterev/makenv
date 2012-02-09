@@ -43,20 +43,20 @@ $(bld)/bin/%:
 $(bld)/%.d: %.c
 	@ echo -e '\tdep\t$<' \
 	&& $(call mkpath,$(bld),$(@D)) \
- 	&& $(cc) $(cflags) -x c -std=c1x -MM $< \
+ 	&& $(cc) $(cflags) -x c -std=$(cstd) -MM $< \
  		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
  
 $(bld)/%.o: %.c
 	@ echo -e '\tcc\t$<' \
-	&& $(cc) $(cflags) $(copt) -x c -std=c1x -o $@ $<
+	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
 
 $(bld)/%.d: %.cpp
 	@ echo -e '\tdep c++\t$<' \
 	&& $(call mkpath,$(bld),$(@D)) \
- 	&& $(cc) $(cflags) -x c++ -std=c++0x -MM $< \
+ 	&& $(cc) $(cflags) -x c++ -std=$(cppstd) -MM $< \
  		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
  
 $(bld)/%.o: %.cpp
 	@ echo -e '\tcc c++\t$<' \
-	&& $(cc) $(cflags) $(copt) -x c++ -std=c++0x -o $@ $<
+	&& $(cc) $(cflags) $(copt) -x c++ -std=$(cppstd) -o $@ $<
 

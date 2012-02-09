@@ -1,9 +1,11 @@
 cc = gcc -Wall -Werror -pedantic -c -pipe
 cflags = -I .
 cdebug = -g
-coptimization = -O4
+coptimization = -O3
+cstd = c99
+cppstd = c++0x
 
 lnk = gcc -pipe
 lflags =
 ldebug = -g
-loptimization = -O4 -Wl,-s
+loptimization = -O3 -Wl,-s
