@@ -51,7 +51,7 @@ $(bld)/%.o: %.c
 	&& $(cc) $(cflags) $(copt) -x c -std=c1x -o $@ $<
 
 $(bld)/%.d: %.cpp
-	@ echo -e '\tdep\t$<' \
+	@ echo -e '\tdep c++\t$<' \
 	&& $(call mkpath,$(bld),$(@D)) \
  	&& $(cc) $(cflags) -x c++ -std=c++0x -MM $< \
  		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
