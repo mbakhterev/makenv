@@ -29,10 +29,16 @@ mkpath = \
  		|| { echo 'error: no build dir: $(1)' 1>&2; false; }; } \
  	&& { test -d $(2) || mkdir -p '$(2)'; }
 
+$(bld)/bin/%: %.sh
+	@ echo -e '\tinstall\t$@' \
+	&& $(call mkpath,$(bld),$(@D)) \
+	&& install -m 755 $< $@
+
 $(bld)/bin/%:
-	@ echo -e '\tlnk\t$@' \
+	@ echo -e '\tlink\t$@' \
 	&& $(call mkpath,$(bld),$(@D)) \
 	&& $(lnk) $(lflags) $^ -o $@
+
 
 $(bld)/%.d: %.c
 	@ echo -e '\tdep\t$<' \
@@ -53,3 +59,4 @@ $(bld)/%.d: %.cpp
 $(bld)/%.o: %.cpp
 	@ echo -e '\tcc c++\t$<' \
 	&& $(cc) $(cflags) $(copt) -x c++ -std=c++0x -o $@ $<
+
