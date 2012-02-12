@@ -14,7 +14,7 @@ endif
 
 include $(foreign)/mkenv/gnu/cc/$(toolchain).mk
 
-ifdef debug
+ifeq ($(debug), Y)
 copt = $(cdebug)
 lflags += $(ldebug)
 else
@@ -46,10 +46,6 @@ $(bld)/%.d: %.c
 	&& $(call mkpath,$(bld),$(@D)) \
  	&& $(cc) $(cflags) -x c -std=$(cstd) -MM $< \
  		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
- 
-$(bld)/%.o: %.c
-	@ echo -e '\tcc\t$<' \
-	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
 
 $(bld)/%.d: %.cpp
 	@ echo -e '\tdep c++\t$<' \
@@ -57,12 +53,10 @@ $(bld)/%.d: %.cpp
  	&& $(cc) $(cflags) -x c++ -std=$(cppstd) -MM $< \
  		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
  
+$(bld)/%.o: %.c
+	@ echo -e '\tcc\t$<' \
+	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
+ 
 $(bld)/%.o: %.cpp
 	@ echo -e '\tcc c++\t$<' \
 	&& $(cc) $(cflags) $(copt) -x c++ -std=$(cppstd) -o $@ $<
-
-showvars:
-	@ echo -e \
-		'\tforeign = $(foreign)\n' \
-		'\ttoolchain = $(toolchain)\n' \
-		'\tbld = $(bld)'
