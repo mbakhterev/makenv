@@ -1,16 +1,18 @@
-ifndef bld
-$(error "bld root isn't defined")
+makedir = $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
+
+ifndef toolchain
+toolchain = gcc
 endif
 
 ifndef foreign
-$(error "foreign root isn't defined")
+foreign = $(abspath $(makedir)/../foreign)
 endif
 
-ifndef toolchain
-$(error "toolchain isn't defined")
+ifndef bld
+bld = $(abspath $(makedir)/../bld)
 endif
 
-include $(foreign)/mkenv/$(toolchain).mk
+include $(foreign)/mkenv/gnu/cc/$(toolchain).mk
 
 ifdef debug
 copt = $(cdebug)
@@ -39,7 +41,6 @@ $(bld)/bin/%:
 	&& $(call mkpath,$(bld),$(@D)) \
 	&& $(lnk) $(lflags) $^ -o $@
 
-
 $(bld)/%.d: %.c
 	@ echo -e '\tdep\t$<' \
 	&& $(call mkpath,$(bld),$(@D)) \
@@ -60,3 +61,8 @@ $(bld)/%.o: %.cpp
 	@ echo -e '\tcc c++\t$<' \
 	&& $(cc) $(cflags) $(copt) -x c++ -std=$(cppstd) -o $@ $<
 
+showvars:
+	@ echo -e \
+		'\tforeign = $(foreign)\n' \
+		'\ttoolchain = $(toolchain)\n' \
+		'\tbld = $(bld)'
