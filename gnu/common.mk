@@ -1,18 +1,17 @@
-makedir = $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
-
-ifndef toolchain
-toolchain = gcc
+ifndef foreign
+$(error foreign root dir isn't defined)
 endif
 
-ifndef foreign
-foreign = $(abspath $(makedir)/../foreign)
+ifndef toolchain
+$(error C toolchain isn't defined)
 endif
 
 ifndef bld
-bld = $(abspath $(makedir)/../bld)
+$(error build root dir isn't defined)
 endif
 
 include $(foreign)/mkenv/gnu/cc/$(toolchain).mk
+include $(foreign)/mkenv/gnu/tex/texlive.mk
 
 ifeq ($(debug), Y)
 copt = $(cdebug)
@@ -30,6 +29,8 @@ mkpath = \
 	{ test -d '$(1)' \
  		|| { echo 'error: no build dir: $(1)' 1>&2; false; }; } \
  	&& { test -d $(2) || mkdir -p '$(2)'; }
+
+bldpath = $(bld)/$(dir $(lastword $(MAKEFILE_LIST)))
 
 $(bld)/bin/%: %.sh
 	@ echo -e '\tinstall\t$@' \
@@ -60,3 +61,12 @@ $(bld)/%.o: %.c
 $(bld)/%.o: %.cpp
 	@ echo -e '\tcc c++\t$<' \
 	&& $(cc) $(cflags) $(copt) -x c++ -std=$(cppstd) -o $@ $<
+
+$(bld)/%.pdf: $(bld)/%.tex
+	@ echo -e '\ttex\t$<' \
+	&& (cd $(@D) && ($(tex) $< && $(tex) $<) | iconv -f $(texcode))
+
+$(bld)/%.tex: %.tex
+	@ echo -e '\tcp\t$<' \
+	&& $(call mkpath,$(bld),$(@D)) \
+	&& iconv -t $(texcode) < $< > $@
