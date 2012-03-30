@@ -9,3 +9,5 @@ lnk = clang -pipe
 lflags =
 ldebug = -g
 loptimization = -flto -O4 -Wl,-s
+
+ar = ar

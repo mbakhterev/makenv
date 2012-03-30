@@ -30,7 +30,29 @@ mkpath = \
  		|| { echo 'error: no build dir: $(1)' 1>&2; false; }; } \
  	&& { test -d $(2) || mkdir -p '$(2)'; }
 
-bldpath = $(bld)/$(dir $(lastword $(MAKEFILE_LIST)))
+
+bits = $(bld)/B
+bitspath = $(bld)/B/$(dir $(lastword $(MAKEFILE_LIST)))
+
+$(bits)/%.d: %.c
+	@ echo -e '\tdep\t$<' \
+	&& $(call mkpath,$(bld),$(@D)) \
+ 	&& $(cc) $(cflags) -x c -std=$(cstd) -MM $< \
+ 		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
+
+$(bits)/%.d: %.cpp
+	@ echo -e '\tdep c++\t$<' \
+	&& $(call mkpath,$(bld),$(@D)) \
+ 	&& $(cc) $(cflags) -x c++ -std=$(cppstd) -MM $< \
+ 		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
+ 
+$(bits)/%.o: %.c
+	@ echo -e '\tcc\t$<' \
+	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
+ 
+$(bits)/%.o: %.cpp
+	@ echo -e '\tcc c++\t$<' \
+	&& $(cc) $(cflags) $(copt) -x c++ -std=$(cppstd) -o $@ $<
 
 $(bld)/bin/%: %.sh
 	@ echo -e '\tinstall\t$@' \
@@ -42,25 +64,15 @@ $(bld)/bin/%:
 	&& $(call mkpath,$(bld),$(@D)) \
 	&& $(lnk) $(lflags) $^ -o $@
 
-$(bld)/%.d: %.c
-	@ echo -e '\tdep\t$<' \
+$(bld)/lib/%.a:
+	@ echo -e '\tlib\t$<' \
 	&& $(call mkpath,$(bld),$(@D)) \
- 	&& $(cc) $(cflags) -x c -std=$(cstd) -MM $< \
- 		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
+	&& $(ar) r $@ $^
 
-$(bld)/%.d: %.cpp
-	@ echo -e '\tdep c++\t$<' \
+$(bld)/include/%.h:
+	@ echo -e '\theader\t$@' \
 	&& $(call mkpath,$(bld),$(@D)) \
- 	&& $(cc) $(cflags) -x c++ -std=$(cppstd) -MM $< \
- 		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
- 
-$(bld)/%.o: %.c
-	@ echo -e '\tcc\t$<' \
-	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
- 
-$(bld)/%.o: %.cpp
-	@ echo -e '\tcc c++\t$<' \
-	&& $(cc) $(cflags) $(copt) -x c++ -std=$(cppstd) -o $@ $<
+	&& install -m 755 $< $@
 
 $(bld)/%.pdf: $(bld)/%.tex
 	@ echo -e '\ttex\t$<' \

@@ -9,3 +9,5 @@ lnk = gcc -pipe
 lflags =
 ldebug = -g
 loptimization = -O3 -Wl,-s
+
+ar = ar
