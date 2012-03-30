@@ -22,8 +22,8 @@ lflags += $(loptimization)
 endif
 
 o2d = $(patsubst %.o,%.d,$(1))
-c2o = $(addprefix $(1)/, $(patsubst %.c,%.o,$(2)))
-cpp2o = $(addprefix $(1)/, $(patsubst %.cpp,%.o,$(2)))
+c2o = $(addprefix $(1), $(patsubst %.c,%.o,$(2)))
+cpp2o = $(addprefix $(1), $(patsubst %.cpp,%.o,$(2)))
 
 mkpath = \
 	{ test -d '$(1)' \
@@ -32,7 +32,7 @@ mkpath = \
 
 
 bits = $(bld)/B
-bitspath = $(bld)/B/$(dir $(lastword $(MAKEFILE_LIST)))
+bitspath = $(bits)/$(dir $(lastword $(MAKEFILE_LIST)))
 
 $(bits)/%.d: %.c
 	@ echo -e '\tdep\t$<' \
