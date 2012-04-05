@@ -21,6 +21,12 @@ copt = $(coptimization)
 lflags += $(loptimization)
 endif
 
+undefine coptimization
+undefine loptimization
+undefine ldebug
+undefine cdebug
+undefine debug
+
 o2d = $(patsubst %.o,%.d,$(1))
 c2o = $(addprefix $(1)/,$(patsubst %.c,%.o,$(2)))
 cpp2o = $(addprefix $(1)/,$(patsubst %.cpp,%.o,$(2)))

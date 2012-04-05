@@ -1,13 +1,17 @@
-cc = gcc -Wall -Werror -pedantic -c -pipe
+include $(addprefix $(dir $(lastword MAKEFILE_LIST)),gcc-common.mk)
+
+cc = $(cctarget) -Wall -Werror -pedantic -c -pipe
 cflags = -I .
 cdebug = -g
 coptimization = -flto -O0
 cstd = c1x
 cppstd = c++0x
 
-lnk = gcc -pipe
+lnk = $(cctarget) -pipe
 lflags =
 ldebug = -g
 loptimization = -flto -O3 -Wl,-s
 
-ar = ar
+
+undefine toolchain
+undefine cctarget

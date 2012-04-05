@@ -35,8 +35,15 @@ esac
 
 bld="$(cd "$bld" && pwd)"
 fgn="$(cd "$foreign" && pwd)"
-tcn="$toolchain"
 dbg="$debug"
+
+info=($(echo "$toolchain" | awk '{split($0, a, ":"); print(a[1], a[2], a[3])}'))
+
+echo ${info[@]}
+
+tcn="${info[0]}"
+test ! -z "${info[1]}" && ttgt="ttarget=${info[1]}"
+test ! -z "${info[2]}" && tver="tversion=${info[2]}"
 
 foreignmake () {
 	echo building "$@"
@@ -46,7 +53,9 @@ foreignmake () {
 	test -d "$froot" || { echo "no foreign module: $froot"; false; }
 	mkdir -p "$fbld"
 	( cd "$froot/src"; make -j $makejobs -f gnu.mk \
-		bld="$fbld" foreign="$fgn" toolchain="$tcn" debug="$dbg" "$@" )
+		bld="$fbld" foreign="$fgn" \
+			toolchain="$tcn" "$ttgt" "$tver" \
+			debug="$dbg" "$@" )
 	echo
 }
 
@@ -56,4 +65,6 @@ then
 fi
 
 ( cd "$base/src" && make -j $makejobs -f gnu.mk \
-	bld="$bld" foreign="$fgn" toolchain="$tcn" debug="$dbg" )
+	bld="$bld" foreign="$fgn" \
+		toolchain="$tcn" "$ttgt" "$tver" \
+		debug="$dbg" )
