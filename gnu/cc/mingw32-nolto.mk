@@ -1,4 +1,4 @@
-include $(addprefix $(dir $(lastword MAKEFILE_LIST)),gcc-common.mk)
+include $(addprefix $(dir $(lastword $(MAKEFILE_LIST))),gcc-common.mk)
 
 cc = i686-pc-mingw32-gcc -Wall -Werror -pedantic -c -pipe
 coptimization = -O3

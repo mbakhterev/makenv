@@ -1,4 +1,4 @@
-include $(addprefix $(dir $(lastword MAKEFILE_LIST)),gcc-common.mk)
+include $(addprefix $(dir $(lastword $(MAKEFILE_LIST))),gcc-common.mk)
 
 cc = gcc -Wall -Werror -pedantic -c -pipe
 coptimization = -O3
