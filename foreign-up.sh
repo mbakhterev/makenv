@@ -2,15 +2,9 @@ set -e
 
 cd "$(dirname "$0")"
 
-if test -z "$1"
-then
-	prefix="$HOME/Gits/0xfb"
-else
-	prefix="$1"
-fi
+{ test -z "$1" && prefix="$HOME/Gits/0xfb"; } || prefix="$1"
 
 test -d foreign || mkdir foreign
-
 cd foreign
 
 function update() {

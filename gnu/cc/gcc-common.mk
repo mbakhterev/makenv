@@ -1,4 +1,4 @@
-tcc = gcc
+cctarget = gcc
 
 ifdef ttarget
 cctarget += -b $(ttarget)
