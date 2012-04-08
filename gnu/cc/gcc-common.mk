@@ -1,14 +1,7 @@
-cctarget = gcc
+cflags = -I .
+cdebug = -g
 
-ifdef ttarget
-cctarget += -b $(ttarget)
-endif
-
-ifdef tcversion
-cctarget += -V $(tversion)
-endif
-
-undefine ttarget
-undefine tversion
+lflags =
+ldebug = -g
 
 ar = ar

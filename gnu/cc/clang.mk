@@ -11,3 +11,5 @@ ldebug = -g
 loptimization = -flto -O4 -Wl,-s
 
 ar = ar
+
+undefine toolchain
