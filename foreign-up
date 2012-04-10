@@ -10,3 +10,5 @@ cd foreign
 function update() {
 	{ test -d "$1" && ( cd "$1"; git pull ); } || git clone "$prefix/$1"
 }
+
+update mkenv
