@@ -21,15 +21,7 @@ copt = $(coptimization)
 lflags += $(loptimization)
 endif
 
-# undefine coptimization
-# undefine loptimization
-# undefine ldebug
-# undefine cdebug
-
 undefine debug
-
-# $(warning COPT $(copt))
-# $(warning LFLAGS $(lflags))
 
 o2d = $(patsubst %.o,%.d,$(1))
 c2o = $(addprefix $(1)/,$(patsubst %.c,%.o,$(2)))
@@ -60,7 +52,7 @@ $(bits)/%.d: %.cpp
  		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
  
 $(bits)/%.o: %.c
-	echo -e '\tcc\t$@' \
+	@ echo -e '\tcc\t$@' \
 	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
  
 $(bits)/%.o: %.cpp
