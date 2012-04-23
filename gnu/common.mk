@@ -21,11 +21,15 @@ copt = $(coptimization)
 lflags += $(loptimization)
 endif
 
-undefine coptimization
-undefine loptimization
-undefine ldebug
-undefine cdebug
+# undefine coptimization
+# undefine loptimization
+# undefine ldebug
+# undefine cdebug
+
 undefine debug
+
+# $(warning COPT $(copt))
+# $(warning LFLAGS $(lflags))
 
 o2d = $(patsubst %.o,%.d,$(1))
 c2o = $(addprefix $(1)/,$(patsubst %.c,%.o,$(2)))
@@ -35,7 +39,6 @@ mkpath = \
 	{ test -d '$(1)' \
  		|| { echo 'error: no build dir: $(1)' 1>&2; false; }; } \
  	&& { test -d $(2) || mkdir -p '$(2)'; }
-
 
 bits = $(bld)/B
 bitspath = $(bits)/$(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
@@ -57,7 +60,7 @@ $(bits)/%.d: %.cpp
  		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
  
 $(bits)/%.o: %.c
-	@ echo -e '\tcc\t$@' \
+	echo -e '\tcc\t$@' \
 	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
  
 $(bits)/%.o: %.cpp
