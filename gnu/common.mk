@@ -32,6 +32,8 @@ mkpath = \
  		|| { echo 'error: no build dir: $(1)' 1>&2; false; }; } \
  	&& { test -d $(2) || mkdir -p '$(2)'; }
 
+bldpath = $(bld)/$(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
+
 bits = $(bld)/B
 bitspath = $(bits)/$(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
 
