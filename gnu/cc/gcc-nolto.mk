@@ -8,4 +8,4 @@ cppstd = c++0x
 lnk = gcc -pipe
 loptimization = -Wl,-s $(gccopt)
 
-undefine toolchain
+# undefine toolchain
