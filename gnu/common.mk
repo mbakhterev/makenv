@@ -83,7 +83,9 @@ $(I)/%.h:
 
 $(bld)/%.pdf: $(bld)/%.tex
 	@ echo -e '\ttex\t$@' \
-	&& (cd $(@D) && ($(tex) $< && $(tex) $<) | iconv -f $(texcode))
+	&& (cd $(@D) && ($(tex) $< && $(tex) $<) \
+		| iconv -f $(texcode)) \
+		| sed -ne 's:^$(bld):\.:g; p'
 
 $(bld)/%.tex: %.tex
 	@ echo -e '\tcp\t$@' \
