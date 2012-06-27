@@ -83,11 +83,26 @@ $(I)/%.h:
 
 $(bld)/%.pdf: $(bld)/%.tex
 	@ echo -e '\ttex\t$@' \
-	&& (cd $(@D) && ($(tex) $< && $(tex) $<) \
-		| iconv -f $(texcode)) \
+	&& (cd $(@D) && ($(tex) $< && $(tex) $<)) \
+		| iconv -f $(texcode) \
+		| sed -ne 's:^$(bld):\.:g; p'
+
+$(bld)/%.pdf: $(bld)/%.xtex
+	@ echo -e '\txetex\t$@' \
+	&& (cd $(@D) && ($(xetex) $< && $(tex) $<)) \
 		| sed -ne 's:^$(bld):\.:g; p'
 
 $(bld)/%.tex: %.tex
+	@ echo -e '\tcp\t$@' \
+	&& $(call mkpath,$(bld),$(@D)) \
+	&& iconv -t $(texcode) < $< > $@
+
+$(bld)/%.xtex: %.xtex
+	@ echo -e '\tcp\t$@' \
+	&& $(call mkpath,$(bld),$(@D)) \
+	&& cp $< $@
+
+$(bld)/%.sty: %.sty
 	@ echo -e '\tcp\t$@' \
 	&& $(call mkpath,$(bld),$(@D)) \
 	&& iconv -t $(texcode) < $< > $@
