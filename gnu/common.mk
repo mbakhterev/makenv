@@ -12,6 +12,7 @@ endif
 
 include $(foreign)/mkenv/gnu/cc/$(toolchain).mk
 include $(foreign)/mkenv/gnu/tex/texlive.mk
+include $(foreign)/mkenv/gnu/lexy/flex-yacc.mk
 
 ifeq ($(debug), Y)
 copt = $(cdebug)
@@ -53,6 +54,18 @@ $(bits)/%.d: %.cpp
  	&& $(cc) $(cflags) -x c++ -std=$(cppstd) -MM $< \
  		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
  
+$(bits)/%.o: $(bits)/%.c
+	@ echo -e '\tcc gen\t$@' \
+	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
+
+$(bits)/%-lex.c: %.l
+	@ echo -e '\tlex\t$@' \
+	&& $(lex) -o $@ $<
+
+$(bits)/%-yacc.c: %.y
+	@ echo -e '\tyacc\t$@' \
+	&& $(yacc) -o $@ $<
+
 $(bits)/%.o: %.c
 	@ echo -e '\tcc\t$@' \
 	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<

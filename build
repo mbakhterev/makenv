@@ -25,10 +25,7 @@ done
 test -d "$bld" || { echo "no build directory: $bld"; false; }
 
 case "$toolchain" in
-gcc);;
-gcc-nolto);;
-clang);;
-mingw32-nolto);;
+gcc | clang | gcc-nolto);;
 *) echo "toolchain should be one of: gcc gcc-nolto clang mingw32-nolto"; false
 esac
 
@@ -37,15 +34,19 @@ fgn="$(cd "$foreign" && pwd)"
 dbg="$debug"
 tcn="$toolchain"
 
-foreignmake () {
+foreignmake () \
+{
 	echo building "$@"
 	froot="$fgn/$1"
 	fbld="$(dirname "$bld/F/$2")"
 	shift 2
+
 	test -d "$froot" || { echo "no foreign module: $froot"; false; }
 	mkdir -p "$fbld"
-	( cd "$froot/src"; make -j $makejobs -f gnu.mk \
+
+	( cd "$froot"; make -j $makejobs -f gnu.mk \
 		bld="$fbld" foreign="$fgn" toolchain="$tcn" debug="$dbg" "$@" )
+
 	echo
 }
 
@@ -54,5 +55,5 @@ then
 	true
 fi
 
-( cd "$base/src" && make -j $makejobs -f gnu.mk \
+( cd "$base" && make -j $makejobs -f gnu.mk \
 	bld="$bld" foreign="$fgn" toolchain="$tcn" debug="$dbg" )
