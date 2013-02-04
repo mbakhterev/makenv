@@ -53,18 +53,22 @@ $(bits)/%.d: %.cpp
 	&& $(call mkpath,$(bld),$(@D)) \
  	&& $(cc) $(cflags) -x c++ -std=$(cppstd) -MM $< \
  		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
- 
-$(bits)/%.o: $(bits)/%.c
-	@ echo -e '\tcc gen\t$@' \
-	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
 
-$(bits)/%-lex.c: %.l
+$(bits)/%.d: $(bits)/%.c
+	@ echo -e '\tdep\t$@' \
+	&& $(call mkpath,$(bld),$(@D)) \
+ 	&& $(cc) $(cflags) -x c -std=$(cstd) -MM $< \
+ 		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
+
+$(bits)/%.lex.c: %.l
 	@ echo -e '\tlex\t$@' \
+	&& $(call mkpath,$(bld),$(@D)) \
 	&& $(lex) -o $@ $<
 
-$(bits)/%-yacc.c: %.y
+$(bits)/%.tab.c $(bits)%.tab.h: %.y
 	@ echo -e '\tyacc\t$@' \
-	&& $(yacc) -o $@ $<
+	&& $(call mkpath,$(bld),$(@D)) \
+	&& $(yacc) -d -b '$(bits)/$*' $<
 
 $(bits)/%.o: %.c
 	@ echo -e '\tcc\t$@' \
@@ -73,6 +77,10 @@ $(bits)/%.o: %.c
 $(bits)/%.o: %.cpp
 	@ echo -e '\tcc c++\t$@' \
 	&& $(cc) $(cflags) $(copt) -x c++ -std=$(cppstd) -o $@ $<
+
+$(bits)/%.o: $(bits)/%.c
+	@ echo -e '\tcc gen\t$@' \
+	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
 
 $(B)/%: %.sh
 	@ echo -e '\tinstall\t$@' \
