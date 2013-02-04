@@ -1,6 +1,6 @@
 gccopt = -O3 -march=native -mtune=native
 
-cflags = -I .
+cflags =
 cdebug = -g
 
 lflags =

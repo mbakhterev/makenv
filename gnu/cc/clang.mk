@@ -1,5 +1,5 @@
 cc = clang -std=c1x -Wall -Werror -pedantic -c -pipe
-cflags = -I .
+cflags =
 cdebug = -g
 coptimization = -flto 
 cstd=c1x

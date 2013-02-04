@@ -97,7 +97,7 @@ $(L)/%.a:
 	&& $(call mkpath,$(bld),$(@D)) \
 	&& $(ar) rc $@ $^
 
-$(I)/%.h:
+$(I)/%.h: lib/%.h
 	@ echo -e '\theader\t$@' \
 	&& $(call mkpath,$(bld),$(@D)) \
 	&& install -m 755 $< $@
