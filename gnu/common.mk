@@ -30,13 +30,15 @@ cpp2o = $(addprefix $(1)/,$(patsubst %.cpp,%.o,$(2)))
 
 mkpath = \
 	{ test -d '$(1)' \
- 		|| { echo 'error: no build dir: $(1)' 1>&2; false; }; } \
- 	&& { test -d $(2) || mkdir -p '$(2)'; }
+		|| { echo 'error: no build dir: $(1)' 1>&2; false; }; } \
+	&& { test -d $(2) || mkdir -p '$(2)'; }
 
 bldpath = $(bld)/$(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
 
 bits = $(bld)/B
 bitspath = $(bits)/$(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
+
+sub = { sed -e 's:$(1):$(2):g'; }
 
 B = $(bld)/bin
 L = $(bld)/lib
@@ -45,20 +47,25 @@ I = $(bld)/include
 $(bits)/%.d: %.c
 	@ echo -e '\tdep\t$@' \
 	&& $(call mkpath,$(bld),$(@D)) \
- 	&& $(cc) $(cflags) -x c -std=$(cstd) -MM $< \
- 		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
+	&& $(cc) $(cflags) -x c -std=$(cstd) -MM $< | $(call sub,$(*F).o,$(@D)/$(*F).o $@) > $@
+
+#		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
 
 $(bits)/%.d: %.cpp
 	@ echo -e '\tdep c++\t$@' \
 	&& $(call mkpath,$(bld),$(@D)) \
- 	&& $(cc) $(cflags) -x c++ -std=$(cppstd) -MM $< \
- 		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
+	&& $(cc) $(cflags) -x c++ -std=$(cppstd) -MM $< | $(call sub,$(*F).o,$(@D)/$(*F).o $@) > $@
+
+#		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
 
 $(bits)/%.d: $(bits)/%.c
-	@ echo -e '\tdep\t$@' \
+	echo -e '\tdep\t$@' \
 	&& $(call mkpath,$(bld),$(@D)) \
- 	&& $(cc) $(cflags) -x c -std=$(cstd) -MM $< \
- 		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
+	&& $(cc) $(cflags) -x c -std=$(cstd) -MM -MG $< \
+		| $(call sub,$(*F).o,$(@D)/$(*F).o $@) \
+		| $(call sub,\s\+\([^/]\+\.h\)\s*, $(@D)/\1 ) > $@
+g
+#		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
 
 $(bits)/%.lex.c: %.l
 	@ echo -e '\tlex\t$@' \
@@ -73,7 +80,7 @@ $(bits)/%.tab.c $(bits)%.tab.h: %.y
 $(bits)/%.o: %.c
 	@ echo -e '\tcc\t$@' \
 	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
- 
+g
 $(bits)/%.o: %.cpp
 	@ echo -e '\tcc c++\t$@' \
 	&& $(cc) $(cflags) $(copt) -x c++ -std=$(cppstd) -o $@ $<
@@ -90,7 +97,7 @@ $(B)/%: %.sh
 $(B)/%:
 	@ echo -e '\tlink\t$@' \
 	&& $(call mkpath,$(bld),$(@D)) \
-	&& $(lnk) $^ -o $@ $(lflags) 
+	&& $(lnk) $^ -o $@ $(lflags)g
 
 $(L)/%.a:
 	@ echo -e '\tlib\t$@' \
