@@ -59,7 +59,7 @@ $(bits)/%.d: %.cpp
 #		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
 
 $(bits)/%.d: $(bits)/%.c
-	echo -e '\tdep\t$@' \
+	@ echo -e '\tdep\t$@' \
 	&& $(call mkpath,$(bld),$(@D)) \
 	&& $(cc) $(cflags) -x c -std=$(cstd) -MM -MG $< \
 		| $(call sub,$(*F).o,$(@D)/$(*F).o $@) \
@@ -80,7 +80,7 @@ $(bits)/%.tab.c $(bits)%.tab.h: %.y
 $(bits)/%.o: %.c
 	@ echo -e '\tcc\t$@' \
 	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
-g
+
 $(bits)/%.o: %.cpp
 	@ echo -e '\tcc c++\t$@' \
 	&& $(cc) $(cflags) $(copt) -x c++ -std=$(cppstd) -o $@ $<
@@ -97,7 +97,7 @@ $(B)/%: %.sh
 $(B)/%:
 	@ echo -e '\tlink\t$@' \
 	&& $(call mkpath,$(bld),$(@D)) \
-	&& $(lnk) $^ -o $@ $(lflags)g
+	&& $(lnk) $^ -o $@ $(lflags)
 
 $(L)/%.a:
 	@ echo -e '\tlib\t$@' \
