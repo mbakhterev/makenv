@@ -64,7 +64,7 @@ $(bits)/%.d: $(bits)/%.c
 	&& $(cc) $(cflags) -x c -std=$(cstd) -MM -MG $< \
 		| $(call sub,$(*F).o,$(@D)/$(*F).o $@) \
 		| $(call sub,\s\+\([^/]\+\.h\)\s*, $(@D)/\1 ) > $@
-g
+
 #		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
 
 $(bits)/%.lex.c: %.l
