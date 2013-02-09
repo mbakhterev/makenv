@@ -5,13 +5,13 @@ gccopt = -O3 -march=native -mtune=native
 cc = gcc -Wall -Werror -pedantic -c -pipe
 cflags =
 coptimization = -flto $(gccopt)
-cdebug = -g
+cdebug = -g -flto
 cstd = c1x
 cppstd = c++0x
 
 lnk = gcc -pipe
 lflags =
 loptimization = -flto -Wl,-s $(gccopt)
-ldebug = -g
+ldebug = -g -flto
 
 ar = ar
