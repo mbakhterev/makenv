@@ -25,8 +25,8 @@ done
 test -d "$bld" || { echo "no build directory: $bld"; false; }
 
 case "$toolchain" in
-gcc | clang | gcc-nolto);;
-*) echo "toolchain should be one of: gcc gcc-nolto clang mingw32-nolto"; false
+gcc | clang);;
+*) echo "toolchain should be one of: gcc clang"; false
 esac
 
 bld="$(cd "$bld" && pwd)"

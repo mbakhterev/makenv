@@ -1,14 +1,14 @@
-cc = clang -std=c1x -Wall -Werror -pedantic -c -pipe
+cc = clang -Wall -Werror -pedantic -c -pipe
 cflags =
 cdebug = -g
-coptimization = -flto 
+coptimization = -flto -O4
 cstd=c1x
 cppstd=c++0x
 
-lnk = clang -pipe
+lnk = llvm-ld -native
 lflags =
-ldebug = -g
-loptimization = -flto -O4 -Wl,-s
+ldebug =
+loptimization = -Xlinker=-static -Xlinker=-Wl,-s
 
 ar = ar
 

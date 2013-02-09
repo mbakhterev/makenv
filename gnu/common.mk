@@ -22,8 +22,6 @@ copt = $(coptimization)
 lflags += $(loptimization)
 endif
 
-# undefine debug
-
 o2d = $(patsubst %.o,%.d,$(1))
 c2o = $(addprefix $(1)/,$(patsubst %.c,%.o,$(2)))
 cpp2o = $(addprefix $(1)/,$(patsubst %.cpp,%.o,$(2)))
@@ -47,16 +45,14 @@ I = $(bld)/include
 $(bits)/%.d: %.c
 	@ echo -e '\tdep\t$@' \
 	&& $(call mkpath,$(bld),$(@D)) \
-	&& $(cc) $(cflags) -x c -std=$(cstd) -MM $< | $(call sub,$(*F).o,$(@D)/$(*F).o $@) > $@
-
-#		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
+	&& $(cc) $(cflags) -x c -std=$(cstd) -MM $< \
+		| $(call sub,$(*F).o,$(@D)/$(*F).o $@) > $@
 
 $(bits)/%.d: %.cpp
 	@ echo -e '\tdep c++\t$@' \
 	&& $(call mkpath,$(bld),$(@D)) \
-	&& $(cc) $(cflags) -x c++ -std=$(cppstd) -MM $< | $(call sub,$(*F).o,$(@D)/$(*F).o $@) > $@
-
-#		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
+	&& $(cc) $(cflags) -x c++ -std=$(cppstd) -MM $< \
+		| $(call sub,$(*F).o,$(@D)/$(*F).o $@) > $@
 
 $(bits)/%.d: $(bits)/%.c
 	@ echo -e '\tdep\t$@' \
@@ -64,8 +60,6 @@ $(bits)/%.d: $(bits)/%.c
 	&& $(cc) $(cflags) -x c -std=$(cstd) -MM -MG $< \
 		| $(call sub,$(*F).o,$(@D)/$(*F).o $@) \
 		| $(call sub,\s\+\([^/]\+\.h\)\s*, $(@D)/\1 ) > $@
-
-#		| awk '{ gsub("$(*F).o", "$(@D)/$(*F).o $@"); print }' > $@
 
 $(bits)/%.lex.c: %.l
 	@ echo -e '\tlex\t$@' \
@@ -102,6 +96,7 @@ $(B)/%:
 $(L)/%.a:
 	@ echo -e '\tlib\t$@' \
 	&& $(call mkpath,$(bld),$(@D)) \
+	&& { [ -f '$@' ] && rm $@ || true; } \
 	&& $(ar) rc $@ $^
 
 $(I)/%.h: lib/%.h
