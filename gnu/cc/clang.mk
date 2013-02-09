@@ -1,7 +1,7 @@
 cc = clang -Wall -Werror -pedantic -c -pipe
 cflags =
 cdebug = -g -flto
-coptimization = -flto -O4
+coptimization = -flto -O3
 cstd=c1x
 cppstd=c++0x
 
