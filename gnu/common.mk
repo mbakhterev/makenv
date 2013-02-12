@@ -2,15 +2,11 @@ ifndef foreign
 $(error foreign root dir isn't defined)
 endif
 
-ifndef toolchain
-$(error C toolchain isn't defined)
-endif
-
 ifndef bld
 $(error build root dir isn't defined)
 endif
 
-include $(foreign)/mkenv/gnu/cc/$(toolchain).mk
+include toolchain.mk
 include $(foreign)/mkenv/gnu/tex/texlive.mk
 include $(foreign)/mkenv/gnu/lexy/flex-yacc.mk
 
