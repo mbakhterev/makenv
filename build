@@ -4,7 +4,6 @@ base="$(dirname "$0")"
 
 bld="$base/bld"
 foreign="$base/foreign"
-# toolchain=gcc
 debug=N
 makejobs=5
 buildmodules=Y
@@ -15,7 +14,6 @@ do
 	'-d') debug=Y;;
 	'-n') buildmodules=N;;
 	'-b') shift; bld="$1";;
-	'-t') shift; toolchain="$1";;
 	'-j') shift; test "$1" -gt 0 && makejobs="$1";;
 	esac
 
@@ -23,19 +21,14 @@ do
 done
 
 test -d "$bld" || { echo "no build directory: $bld"; false; }
-
-case "$toolchain" in
-gcc | clang);;
-*) echo "toolchain should be one of: gcc clang"; false
-esac
+test -h "$base/general.mk" || { echo "no $base/general.mk symlink"; false; }
+test -e "$base/toolchain.mk" || { echo "no $base/toolchain.mk"; false; }
 
 bld="$(cd "$bld" && pwd)"
 fgn="$(cd "$foreign" && pwd)"
 dbg="$debug"
-tcn="$toolchain"
 
-foreignmake () \
-{
+foreignmake () {
 	echo building "$@"
 	froot="$fgn/$1"
 	fbld="$(dirname "$bld/F/$2")"
@@ -45,7 +38,7 @@ foreignmake () \
 	mkdir -p "$fbld"
 
 	( cd "$froot"; make -j $makejobs -f gnu.mk \
-		bld="$fbld" foreign="$fgn" toolchain="$tcn" debug="$dbg" "$@" )
+		bld="$fbld" foreign="$fgn" debug="$dbg" "$@" )
 
 	echo
 }
@@ -56,4 +49,4 @@ then
 fi
 
 ( cd "$base" && make -j $makejobs -f gnu.mk \
-	bld="$bld" foreign="$fgn" toolchain="$tcn" debug="$dbg" )
+	bld="$bld" foreign="$fgn" debug="$dbg" )

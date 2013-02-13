@@ -1,15 +1,32 @@
 set -e
 
 cd "$(dirname "$0")"
+base="$(pwd)"
 
-{ test -z "$1" && prefix="$HOME/Gits/0xfb"; } || prefix="$1"
+{ test -z "$1" && prefix="$HOME/Gits"; } || prefix="$1"
+
+test -e "$base/toolchain.mk \
+	|| { echo "no $base/toolchain.mk to propagate"; false; }
 
 test -d foreign || mkdir foreign
 cd foreign
 
-update() \
-{
+update () {
 	{ test -d "$1" && ( cd "$1"; git pull ); } || git clone "$prefix/$1"
 }
 
+generallink () {
+	if test -h "$1/general.mk"; then
+		echo "note: $1/general.mk link exists"
+	else
+		if test -e "$1/general.mk"; then
+			echo "error: $1/general.mk exists and isn't link"
+			false
+		fi
+
+		ln -s "$1/general.mk" "$1/general.mk"
+	fi
+}
+
 update mkenv
+generallink "$base" "$PWD/mkenv/gnu"
