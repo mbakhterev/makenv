@@ -3,7 +3,6 @@ set -e
 base="$(dirname "$0")"
 
 bld="$base/bld"
-foreign="$base/foreign"
 debug=N
 makejobs=5
 buildmodules=Y
@@ -38,7 +37,7 @@ foreignmake () {
 	mkdir -p "$fbld"
 
 	( cd "$froot"; make -j $makejobs -f gnu.mk \
-		bld="$fbld" foreign="$fgn" debug="$dbg" "$@" )
+		bld="$fbld" debug="$dbg" "$@" )
 
 	echo
 }
@@ -48,5 +47,4 @@ then
 	true
 fi
 
-( cd "$base" && make -j $makejobs -f gnu.mk \
-	bld="$bld" foreign="$fgn" debug="$dbg" )
+( cd "$base" && make -j $makejobs -f gnu.mk bld="$bld" debug="$dbg" )

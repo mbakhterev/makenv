@@ -1,7 +1,3 @@
-ifndef foreign
-$(error foreign root dir isn't defined)
-endif
-
 ifndef bld
 $(error build root dir isn't defined)
 endif

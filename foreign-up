@@ -5,7 +5,7 @@ base="$(pwd)"
 
 { test -z "$1" && prefix="$HOME/Gits"; } || prefix="$1"
 
-test -e "$base/toolchain.mk \
+test -e "$base/toolchain.mk" \
 	|| { echo "no $base/toolchain.mk to propagate"; false; }
 
 test -d foreign || mkdir foreign
@@ -20,11 +20,11 @@ generallink () {
 		echo "note: $1/general.mk link exists"
 	else
 		if test -e "$1/general.mk"; then
-			echo "error: $1/general.mk exists and isn't link"
+			echo "error: $1/general.mk exists and isn\'t link"
 			false
 		fi
 
-		ln -s "$1/general.mk" "$1/general.mk"
+		ln -s "$2/general.mk" "$1/general.mk"
 	fi
 }
 
