@@ -1,19 +1,15 @@
 set -e
 
 cd "$(dirname "$0")"
-base="$(pwd)"
+B="$(pwd)"
+F="$B/foreign"
 
 { test -z "$1" && prefix="$HOME/Gits"; } || prefix="$1"
 
-test -e "$base/toolchain.mk" \
-	|| { echo "no $base/toolchain.mk to propagate" 1>&2; false; }
-
-test -d foreign || mkdir foreign
-cd foreign
+test -e "$B/toolchain.mk" \
+	|| { echo "no $B/toolchain.mk to propagate" 1>&2; false; }
 
 update () (
-	echo "update: $1 : $2"
-
 	{ test -z "$1" || test -z "$2"; } \
 		&& { echo "update needs name and revision" 1>&2; false; }
 
@@ -41,5 +37,13 @@ mklink () (
 	fi
 )
 
+
+test -d "$F" || mkdir "$F"
+cd "$F"
+
 update mkenv master
-mklink "$base" "mkenv/gnu" general
+mklink "$B" "$F/mkenv/gnu" general
+
+# update echo-2 master
+# mklink "echo-2" "$F/mkenv/gnu" general
+# mklink "echo-2" "$B" toolchain
