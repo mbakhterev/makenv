@@ -24,13 +24,13 @@ test -h "$base/general.mk" || { echo "no $base/general.mk symlink"; false; }
 test -e "$base/toolchain.mk" || { echo "no $base/toolchain.mk"; false; }
 
 bld="$(cd "$bld" && pwd)"
-fgn="$(cd "$foreign" && pwd)"
+fgn="$(cd "foreign" && pwd)"
 dbg="$debug"
 
 foreignmake () {
 	echo building "$@"
 	froot="$fgn/$1"
-	fbld="$(dirname "$bld/F/$2")"
+	fbld="$bld/F/$2"
 	shift 2
 
 	test -d "$froot" || { echo "no foreign module: $froot"; false; }
@@ -44,6 +44,7 @@ foreignmake () {
 
 if test "$buildmodules" = Y
 then
+#	foreignmake echo-2 echo-2
 	true
 fi
 
