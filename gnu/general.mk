@@ -15,13 +15,12 @@ bitspath = $(bits)/$(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
 sub = { sed -e 's:$(1):$(2):g'; }
 
 B = $(bld)/bin
+T = $(bld)/tst
 L = $(bld)/lib
 I = $(bld)/include
 
 suborig = $(subst file,,$(origin $(1)))
 checkdefs = $(if $(strip $(foreach v,$(1),$(call suborig,$(v)))),$(error $(2)))
-
-include toolchain.mk
 
 ifndef echo
 $(error echo with escape interpretation isn't defined)
@@ -92,6 +91,11 @@ lflags += $(loptimization)
 endif
 
 $(B)/%:
+	@ $(echo) '\tlink\t$@' \
+	&& $(call mkpath,$(bld),$(@D)) \
+	&& $(lnk) $^ -o $@ $(lflags)
+
+$(T)/%:
 	@ $(echo) '\tlink\t$@' \
 	&& $(call mkpath,$(bld),$(@D)) \
 	&& $(lnk) $^ -o $@ $(lflags)
