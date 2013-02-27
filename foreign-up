@@ -43,6 +43,3 @@ mklink () (
 
 update mkenv master
 mklink "$base" "mkenv/gnu" general
-
-update echo-2 master
-mklink "echo-2" "$base" toolchain
