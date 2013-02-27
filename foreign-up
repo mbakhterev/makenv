@@ -6,27 +6,43 @@ base="$(pwd)"
 { test -z "$1" && prefix="$HOME/Gits"; } || prefix="$1"
 
 test -e "$base/toolchain.mk" \
-	|| { echo "no $base/toolchain.mk to propagate"; false; }
+	|| { echo "no $base/toolchain.mk to propagate" 1>&2; false; }
 
 test -d foreign || mkdir foreign
 cd foreign
 
-update () {
-	{ test -d "$1" && ( cd "$1"; git pull ); } || git clone "$prefix/$1"
-}
+update () (
+	echo "update: $1 : $2"
 
-generallink () {
-	if test -h "$1/general.mk"; then
-		echo "note: $1/general.mk link exists"
+	{ test -z "$1" || test -z "$2"; } \
+		&& { echo "update needs name and revision" 1>&2; false; }
+
+	if test -d "$1"; then
+		cd "$1"
+		git fetch
 	else
-		if test -e "$1/general.mk"; then
-			echo "error: $1/general.mk exists and isn\'t link"
+		git clone "$prefix/$1"
+		cd "$1"
+	fi
+	
+	git checkout "$2"
+)
+
+mklink () (
+	if test -h "$1/$3.mk"; then
+		echo "note: $1/$3.mk link exists" 1>&2
+	else
+		if test -e "$1/$3.mk"; then
+			echo "error: $1/$3.mk exists and isn\'t link" 1>&2
 			false
 		fi
 
-		ln -s "$2/general.mk" "$1/general.mk"
+		ln -s "$2/$3.mk" "$1/$3.mk"
 	fi
-}
+)
 
-update mkenv
-generallink "$base" "$PWD/mkenv/gnu"
+update mkenv master
+mklink "$base" "mkenv/gnu" general
+
+update echo-2 master
+mklink "echo-2" "$base" toolchain
