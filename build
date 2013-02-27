@@ -24,7 +24,7 @@ test -h "$base/general.mk" || { echo "no $base/general.mk symlink"; false; }
 test -e "$base/toolchain.mk" || { echo "no $base/toolchain.mk"; false; }
 
 bld="$(cd "$bld" && pwd)"
-fgn="$(cd "foreign" && pwd)"
+fgn="$(cd "$base/foreign" && pwd)"
 dbg="$debug"
 
 foreignmake () {
@@ -44,7 +44,6 @@ foreignmake () {
 
 if test "$buildmodules" = Y
 then
-#	foreignmake echo-2 echo-2
 	true
 fi
 
