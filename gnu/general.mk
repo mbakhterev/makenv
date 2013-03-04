@@ -26,6 +26,16 @@ ifndef echo
 $(error echo with escape interpretation isn't defined)
 endif
 
+$(B)/%.sh:
+	@ $(echo) '\tinstall\t$@' \
+	&& $(call mkpath,$(bld),$(@D)) \
+	&& install -m 755 $< $@
+
+$(T)/%.sh:
+	@ $(echo) '\tinstall\t$@' \
+	&& $(call mkpath,$(bld),$(@D)) \
+	&& install -m 755 $< $@
+
 ifdef cc # C/C++ Compiler rules group
 
 vars = dep cc cstd cppstd cflags cdebug coptimization
@@ -163,12 +173,3 @@ $(bld)/%.xtex: %.xtex
 
 endif # XeLaTeX group
 
-$(B)/%.sh:
-	@ $(echo) '\tinstall\t$@' \
-	&& $(call mkpath,$(bld),$(@D)) \
-	&& install -m 755 $< $@
-
-$(T)/%.sh:
-	@ $(echo) '\tinstall\t$@' \
-	&& $(call mkpath,$(bld),$(@D)) \
-	&& install -m 755 $< $@
