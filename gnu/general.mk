@@ -163,7 +163,12 @@ $(bld)/%.xtex: %.xtex
 
 endif # XeLaTeX group
 
-$(B)/%: %.sh
+$(B)/%.sh:
+	@ $(echo) '\tinstall\t$@' \
+	&& $(call mkpath,$(bld),$(@D)) \
+	&& install -m 755 $< $@
+
+$(T)/%.sh:
 	@ $(echo) '\tinstall\t$@' \
 	&& $(call mkpath,$(bld),$(@D)) \
 	&& install -m 755 $< $@
