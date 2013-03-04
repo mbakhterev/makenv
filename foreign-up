@@ -11,7 +11,7 @@ test -e "$B/toolchain.mk" \
 
 update () (
 	{ test -z "$1" || test -z "$2"; } \
-		&& { echo "update needs name and revision" 1>&2; false; }
+		&& { echo "update needs name and branch" 1>&2; false; }
 
 	if test -d "$1"; then
 		cd "$1"
@@ -22,6 +22,8 @@ update () (
 	fi
 	
 	git checkout "$2"
+	git pull
+	test -z "$3" || { git checkout "$3"; }
 )
 
 mklink () (
