@@ -7,9 +7,9 @@ mkpath = \
 		|| { echo 'error: no build dir: $(1)' 1>&2; false; }; } \
 	&& { test -d $(2) || mkdir -p '$(2)'; }
 
-bldpath = $(bld)/$(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
-
 bits = $(bld)/B
+rootpath = $(patsubst %/,%,$(dir $(firstword $(MAKEFILE_LIST))))
+nodepath = $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
 bitspath = $(bits)/$(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
 
 sub = { sed -e 's:$(1):$(2):g'; }
@@ -82,10 +82,12 @@ $(bits)/%.o: $(bits)/%.c
 	@ $(echo) '\tcc gen\t$@' \
 	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
 
-$(I)/%.h: lib/%.h
-	@ $(echo) '\theader\t$@' \
-	&& $(call mkpath,$(bld),$(@D)) \
-	&& install -m 755 $< $@
+define headroute =
+$(I)/$1/%.h: $2/%.h
+	@ $(echo) '\theader\t$$@' \
+	&& $(call mkpath,$(bld),$$(@D)) \
+	&& install -m 755 $$< $$@
+endef
 
 endif # C/C++ Compiler group
 
