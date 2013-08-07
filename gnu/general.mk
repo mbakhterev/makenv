@@ -82,7 +82,7 @@ $(bits)/%.o: $(bits)/%.c
 	@ $(echo) '\tcc gen\t$@' \
 	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
 
-define headroute =
+define headroute
 $(I)/$1/%.h: $2/%.h
 	@ $(echo) '\theader\t$$@' \
 	&& $(call mkpath,$(BDIR),$$(@D)) \
