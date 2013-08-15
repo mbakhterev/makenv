@@ -14,6 +14,12 @@ bitspath = $(bits)/$(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
 
 sub = { sed -e 's:$(1):$(2):g'; }
 
+ifndef TCN
+TCN = toolchain
+endif
+
+include $(call rootpath)/$(TCN).mk
+
 B = $(BDIR)/bin
 T = $(BDIR)/tst
 L = $(BDIR)/lib
