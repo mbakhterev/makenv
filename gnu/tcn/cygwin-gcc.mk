@@ -21,4 +21,5 @@ yacc = bison -Wall -L C --locations
 
 # Переменные для подстройки конкретных целей 
 
-c99lexfix = -Wno-unused-but-set-variable
+strictfix = -U__STRICT_ANSI__ -I_REENT_ONLY
+c99lexfix = -Wno-unused-but-set-variable $(strictfix)
