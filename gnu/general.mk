@@ -88,6 +88,11 @@ $(bits)/%.o: $(bits)/%.c
 	@ $(echo) '\tcc gen\t$@' \
 	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
 
+$(bits)/%.h: %.h
+	@ $(echo) '\thead gen\t$@' \
+	&& $(call mkpath,$(BDIR),$(@D)) \
+	&& install -m 755 $< $@
+
 define headroute
 $(I)/$1/%.h: $2/%.h
 	@ $(echo) '\theader\t$$@' \
