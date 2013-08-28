@@ -89,7 +89,7 @@ $(bits)/%.o: $(bits)/%.c
 	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
 
 $(bits)/%.h: %.h
-	@ $(echo) '\thead gen\t$@' \
+	@ $(echo) '\theader\t$@' \
 	&& $(call mkpath,$(BDIR),$(@D)) \
 	&& install -m 755 $< $@
 
