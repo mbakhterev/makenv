@@ -47,7 +47,7 @@ ifdef cc # C/C++ Compiler rules group
 vars = dep cc cstd cppstd cflags cdebug coptimization
 $(call checkdefs,$(vars),C/C++ Compiler group needs: $(vars))
 
-ifeq ($(DBUG), Y)
+ifeq ($(DBG), Y)
 copt = $(cdebug)
 else
 copt = $(coptimization)
@@ -107,7 +107,7 @@ ifdef lnk # LiNK group
 vars = lnk lflags ldebug loptimization ar
 $(call checkdefs,$(vars),LiNK group needs: $(vars))
 
-ifeq ($(DBUG), Y)
+ifeq ($(DBG), Y)
 lflags += $(ldebug)
 else
 lflags += $(loptimization)
