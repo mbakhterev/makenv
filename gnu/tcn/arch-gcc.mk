@@ -2,18 +2,27 @@ echo = echo -e
 
 cc = gcc -Wall -Werror -pedantic -c -pipe
 cflags =
-coptimization = -flto -O2
+
+coptimization = -flto
 cdebug = -g -flto
+
+# coptimization = -O3 -march=native -mtune=native
+# cdebug = -g
+
 cstd = c1x
-cppstd = c++0x
+cppstd = c++11
 dep = $(cc)
 
 lnk = gcc -pipe
 lflags =
+
 loptimization = -flto -fuse-linker-plugin -Wl,-s -O3 -march=native -mtune=native
 ldebug = -g -flto
 
-ar = ar
+# loptimization = -Wl,-s
+# ldebug = -g
+
+ar = gcc-ar
 
 lex = flex -Caer -8 --yylineno --bison-locations
 

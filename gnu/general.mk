@@ -116,12 +116,12 @@ endif
 $(B)/%:
 	@ $(echo) '\tlink\t$@' \
 	&& $(call mkpath,$(BDIR),$(@D)) \
-	&& $(lnk) $^ -o $@ $(lflags)
+	&& $(lnk) $< -o $@ $(lflags) 
 
 $(T)/%:
 	@ $(echo) '\tlink\t$@' \
 	&& $(call mkpath,$(BDIR),$(@D)) \
-	&& $(lnk) $^ -o $@ $(lflags)
+	&& $(lnk) $< -o $@ $(lflags)
 
 $(L)/%.a:
 	@ $(echo) '\tlib\t$@' \
