@@ -25,7 +25,6 @@ ldebug = -g -flto
 ar = gcc-ar
 
 lex = flex -Caer -8 --yylineno --bison-locations
-
 yacc = bison -Wall -L C --locations
 
 # Переменные для подстройки конкретных целей 
