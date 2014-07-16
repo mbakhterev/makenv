@@ -16,8 +16,8 @@ dep = $(cc)
 lnk = gcc -pipe
 lflags =
 
-loptimization = -flto -fuse-linker-plugin -Wl,-s -O3 -march=native -mtune=native
-ldebug = -g -flto
+loptimization = -flto -fuse-linker-plugin -static -Wl,-s -O3 -march=native -mtune=native
+ldebug = -g -flto -static
 
 # loptimization = -Wl,-s
 # ldebug = -g
