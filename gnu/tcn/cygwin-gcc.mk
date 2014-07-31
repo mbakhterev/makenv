@@ -1,15 +1,19 @@
 echo = echo -e
 
-cc = gcc -Wall -Werror -pedantic -c -pipe
-cflags =
+cc = gcc
+cflags =  -Wall -Werror -pedantic -c -pipe
+
 coptimization = -O3 -march=native -mtune=native
 cdebug = -g3
+
 cstd = c1x
 cppstd = c++0x
+
 dep = $(cc)
 
-lnk = gcc -pipe
-lflags =
+lnk = gcc
+lflags = -pipe
+
 loptimization = -Wl,-s 
 ldebug = -g3
 
