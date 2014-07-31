@@ -1,7 +1,7 @@
 echo = echo -e
 
-cc = gcc -Wall -Werror -pedantic -c -pipe
-cflags =
+cc = gcc
+cflags = -Wall -Werror -pedantic -pipe
 
 coptimization = -flto
 cdebug = -g -flto
@@ -13,8 +13,8 @@ cstd = c1x
 cppstd = c++11
 dep = $(cc)
 
-lnk = gcc -pipe
-lflags =
+lnk = gcc
+lflags = -pipe
 
 loptimization = -flto -fuse-linker-plugin -static -Wl,-s -O3 -march=native -mtune=native
 ldebug = -g -flto -static

@@ -78,15 +78,15 @@ $(bits)/%.d: $(bits)/%.c
 
 $(bits)/%.o: %.c
 	@ $(echo) '\tcc\t$@' \
-	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
+	&& $(cc) -c $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
 
 $(bits)/%.o: %.cpp
 	@ $(echo) '\tcc c++\t$@' \
-	&& $(cc) $(cflags) $(copt) -x c++ -std=$(cppstd) -o $@ $<
+	&& $(cc) -c $(cflags) $(copt) -x c++ -std=$(cppstd) -o $@ $<
 
 $(bits)/%.o: $(bits)/%.c
 	@ $(echo) '\tcc gen\t$@' \
-	&& $(cc) $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
+	&& $(cc) -c $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
 
 $(bits)/%.h: %.h
 	@ $(echo) '\theader\t$@' \
