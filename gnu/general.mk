@@ -1,7 +1,7 @@
 ifndef BDIR
 $(error build root dir isn't defined)
 else
-BDIR := $(shell readlink -f '$(BDIR)')
+bdir = $(shell readlink -f '$(BDIR)')
 endif
 
 mkpath = \
@@ -9,7 +9,7 @@ mkpath = \
 		|| { echo 'error: no build dir: $(1)' 1>&2; false; }; } \
 	&& { test -d $(2) || mkdir -p '$(2)'; }
 
-bits = $(BDIR)/B
+bits = $(bdir)/B
 rootpath = $(patsubst %/,%,$(dir $(firstword $(MAKEFILE_LIST))))
 nodepath = $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
 bitspath = $(bits)/$(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
@@ -22,10 +22,10 @@ endif
 
 include $(call rootpath)/$(TCN).mk
 
-B = $(BDIR)/bin
-T = $(BDIR)/tst
-L = $(BDIR)/lib
-I = $(BDIR)/include
+B = $(bdir)/bin
+T = $(bdir)/tst
+L = $(bdir)/lib
+I = $(bdir)/include
 
 suborig = $(subst file,,$(origin $(1)))
 checkdefs = $(if $(strip $(foreach v,$(1),$(call suborig,$(v)))),$(error $(2)))
@@ -36,12 +36,12 @@ endif
 
 $(B)/%.sh:
 	@ $(echo) '\tinstall\t$@' \
-	&& $(call mkpath,$(BDIR),$(@D)) \
+	&& $(call mkpath,$(bdir),$(@D)) \
 	&& install -m 755 $< $@
 
 $(T)/%.sh:
 	@ $(echo) '\tinstall\t$@' \
-	&& $(call mkpath,$(BDIR),$(@D)) \
+	&& $(call mkpath,$(bdir),$(@D)) \
 	&& install -m 755 $< $@
 
 ifdef cc # C/C++ Compiler rules group
@@ -61,19 +61,19 @@ cpp2o = $(addprefix $(1)/,$(patsubst %.cpp,%.o,$(2)))
 
 $(bits)/%.d: %.c
 	@ $(echo) '\tdep\t$@' \
-	&& $(call mkpath,$(BDIR),$(@D)) \
+	&& $(call mkpath,$(bdir),$(@D)) \
 	&& $(dep) $(cflags) -x c -std=$(cstd) -MM $< \
 		| $(call sub,$(*F).o,$(@D)/$(*F).o $@) > $@
 
 $(bits)/%.d: %.cpp
 	@ $(echo) '\tdep c++\t$@' \
-	&& $(call mkpath,$(BDIR),$(@D)) \
+	&& $(call mkpath,$(bdir),$(@D)) \
 	&& $(dep) $(cflags) -x c++ -std=$(cppstd) -MM $< \
 		| $(call sub,$(*F).o,$(@D)/$(*F).o $@) > $@
 
 $(bits)/%.d: $(bits)/%.c
 	@ $(echo) '\tdep\t$@' \
-	&& $(call mkpath,$(BDIR),$(@D)) \
+	&& $(call mkpath,$(bdir),$(@D)) \
 	&& $(dep) $(cflags) -x c -std=$(cstd) -MM -MG $< \
 		| $(call sub,$(*F).o,$(@D)/$(*F).o $@) \
 		| $(call sub,\s\+\([^/]\+\.h\)\s*, $(@D)/\1 ) > $@
@@ -92,13 +92,13 @@ $(bits)/%.o: $(bits)/%.c
 
 $(bits)/%.h: %.h
 	@ $(echo) '\theader\t$@' \
-	&& $(call mkpath,$(BDIR),$(@D)) \
+	&& $(call mkpath,$(bdir),$(@D)) \
 	&& install -m 755 $< $@
 
 define headroute
 $(I)/$1/%.h: $2/%.h
 	@ $(echo) '\theader\t$$@' \
-	&& $(call mkpath,$(BDIR),$$(@D)) \
+	&& $(call mkpath,$(bdir),$$(@D)) \
 	&& install -m 755 $$< $$@
 endef
 
@@ -117,17 +117,17 @@ endif
 
 $(B)/%:
 	@ $(echo) '\tlink\t$@' \
-	&& $(call mkpath,$(BDIR),$(@D)) \
+	&& $(call mkpath,$(bdir),$(@D)) \
 	&& $(lnk) $^ -o $@ $(lflags) 
 
 $(T)/%:
 	@ $(echo) '\tlink\t$@' \
-	&& $(call mkpath,$(BDIR),$(@D)) \
+	&& $(call mkpath,$(bdir),$(@D)) \
 	&& $(lnk) $^ -o $@ $(lflags)
 
 $(L)/%.a:
 	@ $(echo) '\tlib\t$@' \
-	&& $(call mkpath,$(BDIR),$(@D)) \
+	&& $(call mkpath,$(bdir),$(@D)) \
 	&& { [ -f '$@' ] && rm $@ || true; } \
 	&& $(ar) rc $@ $^
 
@@ -137,7 +137,7 @@ ifdef lex
 
 $(bits)/%.lex.c: %.l
 	@ $(echo) '\tlex\t$@' \
-	&& $(call mkpath,$(BDIR),$(@D)) \
+	&& $(call mkpath,$(bdir),$(@D)) \
 	&& $(lex) -o $@ $<
 
 endif
@@ -146,7 +146,7 @@ ifdef yacc
 
 $(bits)/%.tab.c $(bits)%.tab.h: %.y
 	@ $(echo) '\tyacc\t$@' \
-	&& $(call mkpath,$(BDIR),$(@D)) \
+	&& $(call mkpath,$(bdir),$(@D)) \
 	&& $(yacc) -d -b '$(bits)/$*' $<
 
 endif
@@ -156,34 +156,34 @@ ifdef tex # LaTeX group
 vars = texcode
 $(call checkdefs,$(vars),LaTeX group needs: $(vars))
 
-$(BDIR)/%.pdf: $(BDIR)/%.tex
+$(bdir)/%.pdf: $(bdir)/%.tex
 	@ $(echo) '\ttex\t$@' \
 	&& (cd $(@D) && ($(tex) $< && $(tex) $<)) \
 		| iconv -f $(texcode) \
-		| sed -ne 's:^$(BDIR):\.:g; p'
+		| sed -ne 's:^$(bdir):\.:g; p'
 
-$(BDIR)/%.tex: %.tex
+$(bdir)/%.tex: %.tex
 	@ $(echo) '\tcp\t$@' \
-	&& $(call mkpath,$(BDIR),$(@D)) \
+	&& $(call mkpath,$(bdir),$(@D)) \
 	&& iconv -t $(texcode) < $< > $@
 
-$(BDIR)/%.sty: %.sty
+$(bdir)/%.sty: %.sty
 	@ $(echo) '\tcp\t$@' \
-	&& $(call mkpath,$(BDIR),$(@D)) \
+	&& $(call mkpath,$(bdir),$(@D)) \
 	&& iconv -t $(texcode) < $< > $@
 
 endif # LaTeX group
 
 ifdef xetex # XeLaTeX group
 
-$(BDIR)/%.pdf: $(BDIR)/%.xtex
+$(bdir)/%.pdf: $(bdir)/%.xtex
 	@ $(echo) '\txetex\t$@' \
 	&& (cd $(@D) && ($(xetex) $< && $(tex) $<)) \
-		| sed -ne 's:^$(BDIR):\.:g; p'
+		| sed -ne 's:^$(bdir):\.:g; p'
 
-$(BDIR)/%.xtex: %.xtex
+$(bdir)/%.xtex: %.xtex
 	@ $(echo) '\tcp\t$@' \
-	&& $(call mkpath,$(BDIR),$(@D)) \
+	&& $(call mkpath,$(bdir),$(@D)) \
 	&& cp $< $@
 
 endif # XeLaTeX group
