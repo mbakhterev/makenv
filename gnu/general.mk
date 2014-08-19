@@ -1,5 +1,7 @@
 ifndef BDIR
 $(error build root dir isn't defined)
+else
+BDIR := $(shell readlink -f '$(BDIR)')
 endif
 
 mkpath = \
