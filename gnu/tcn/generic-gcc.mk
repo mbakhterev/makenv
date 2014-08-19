@@ -3,7 +3,7 @@ echo = echo -e
 cc = gcc
 cflags =  -Wall -Werror -pedantic -pipe
 
-coptimization = -O3 -march=native -mtune=native
+coptimization = -O3
 cdebug = -g3
 
 cstd = c1x
@@ -14,7 +14,7 @@ dep = $(cc)
 lnk = gcc
 lflags = -pipe
 
-loptimization = -Wl,-s 
+loptimization = -Wl,-s -static
 ldebug = -g3
 
 ar = ar

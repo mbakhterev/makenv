@@ -6,9 +6,6 @@ cflags = -Wall -Werror -pedantic -pipe
 coptimization = -flto
 cdebug = -g -flto
 
-# coptimization = -O3 -march=native -mtune=native
-# cdebug = -g
-
 cstd = c1x
 cppstd = c++11
 dep = $(cc)
@@ -16,11 +13,9 @@ dep = $(cc)
 lnk = gcc
 lflags = -pipe
 
-loptimization = -flto -fuse-linker-plugin -static -Wl,-s -O3 -march=native -mtune=native
+loptimization = \
+	-flto -fuse-linker-plugin -static -Wl,-s -O3 -march=native -mtune=native
 ldebug = -g -flto -static
-
-# loptimization = -Wl,-s
-# ldebug = -g
 
 ar = gcc-ar
 
