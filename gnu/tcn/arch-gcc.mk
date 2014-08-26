@@ -4,7 +4,7 @@ cc = gcc
 cflags = -Wall -Werror -pedantic -pipe
 
 coptimization = -flto
-cdebug = -g -flto
+cdebug = -g3 -flto
 
 cstd = c1x
 cppstd = c++11
@@ -15,7 +15,8 @@ lflags = -pipe
 
 loptimization = \
 	-flto -fuse-linker-plugin -static -Wl,-s -O3 -march=native -mtune=native
-ldebug = -g -flto -static
+
+ldebug = -g3 -flto -static
 
 ar = gcc-ar
 
