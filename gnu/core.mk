@@ -1,5 +1,10 @@
+# Гораздо удобнее написать используемые функции на чем-то более вменяемом, чем язык функций make.
+
+# Для успешной работы должна быть задана директория для сборки. Проверяем
+# наличие переменной и вычисляем физический путь до него.
+
 ifndef BDIR
-$(error build root dir isn't defined)
+$(error build root dir is not defined)
 else
 bdir = $(shell readlink -f '$(BDIR)')
 endif
