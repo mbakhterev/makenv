@@ -63,35 +63,25 @@
     ; Обработчик ошибок от chdir. Логика такая: если соответствующей записи не
     ; существует, то всё хорошо, нужно создать цепочку оставшихся директорий,
     ; передающуюся в path; в остальных случаях непреодолимая ошибка.
-    (define (handler path)
+    (define (handler items)
       (lambda error
         (let ((errno (system-error-errno error)))
-          (cond
-            ((eqv? ENOENT errno) path)
-            (else 
-              (format (current-error-port) "into-dirs!: ~a~%" (strerror errno))
-              #f)))))
+          (cond ((eqv? ENOENT errno) items)
+                (else (apply throw error))))))
 
     (let loop ((items path))
       (if (null? items)
         '()
         (let ((v (catch 'system-error (lambda () (chdir (car items))) (handler items))))
-          (if (unspecified? v) (loop (cdr items)) v)))))
+          (if (not (unspecified? v)) v (loop (cdr items)))))))
 
-  ; Процедура для создания остатка пути
-;   (define (make-dirs! path)
-;     (define handler
-;       (lambda error
-;         (format (current-error-port)
-;                 "make-dirs!: ~a~%" (strerror (system-error-errno error)))
-;         #f))
-;     
-;     (let loop ((items path))
-;       (if (null? items)
-;         #t
-;         (let ((v (catch 'system-error (lambda () (mkdir (car items) #700)) handler)))
-;           (if (unspecified? v) (loop (cdr items)) v)))))
+  ; Процедура для создания остатка пути. Обработка ошибок 
+  (define (make-dirs! path)
+    (let loop ((items path))
+      (if (not (null? items))
+        (let ((i (car items)))
+          (if (not (or (equal? "." i) (equal? ".." i))) (mkdir i #o700))
+          (chdir i)
+          (loop (cdr items))))))
 
-  (into-dirs! (split-path path)))
-
-
+  (make-dirs! (into-dirs! (split-path path))))
