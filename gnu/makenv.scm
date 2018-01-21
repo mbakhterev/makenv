@@ -14,48 +14,11 @@
         (cons file-name-separator-string items)
         items)))
 
-;   ; Проверка наличия и доступности директории. Проверка на существование
-;   ; директории и доступность её для чтения и перечисления файлов (режим 5).
-; 
-;   (define (check-dir dir)
-;     (let ((st (catch 'system-error (lambda () (stat dir)) (lambda error #f))))
-;       (cond ((not (array? st)) #:no-stats)
-; 
-;             ((and (eq? 'directory (stat:type st))
-;                   (logand #o500 (stat:perms st))) #:dir-ok)
-;             
-;             (else #:dir-bad))))
-; 
-;   ; Генерация следующего пути для проверки на существование директории или
-;   ; для создания новой
-; 
-;   (define (next-path path items)
-;     (if (null? items) path (let ((name (car items)))
-;                              (if (eq? file-name-separator-string name)
-;                                file-name-separator-string
-;                                (string-append path file-name-separator-string name))))) 
-; 
-;   ; Процедура прохода по существующим директориям начала пути. Каждый элемент
-;   ; пути проверяем при помощи check-dir. Дальше можем идти, если check-dir
-;   ; вернёт #:dir-ok. В случае #:dir-bad не сможем создать путь. В случае
-;   ; #:no-stats считаем, что соответствующего имени нет, и дальше надо создавать
-;   ; директории
-; 
-;   (define (into-dirs path-items)
-;     (display path-items)
-;     (newline)
-;     (let loop ((path "")
-;                (items path-items))
-;       (if (null? items)
-;         ; Если в списке нет элементов, то прошлись по списку целиком
-;         (cons path '())
-; 
-;         ; В противном случае углубляем проверки на один уровень.
-;         (let ((n-path (next-path path items)))
-;           (case (check-dir n-path)
-;             ((#:dir-ok) (loop n-path (cdr items)))
-;             ((#:no-stats) (cons path items))
-;             (else #f))))))
+  ; Проверка корректности пути. Разрешаем только те, что не ведут обратно вверх,
+  ; и не содержат повторений текущей директории.
+  (define (path-correct? items)
+    (and (not (equal? ".." (car items)))
+         (and-map (lambda (i) (not (or (equal? i ".") (equal? i "..")))) (cdr items))))
 
   ; Процедура меняющая текущую директорию вдоль path. Возвращает либо остаток
   ; пути, либо #f, как индикация ошибки: невозможность пройти вдоль пути.
@@ -75,13 +38,35 @@
         (let ((v (catch 'system-error (lambda () (chdir (car items))) (handler items))))
           (if (not (unspecified? v)) v (loop (cdr items)))))))
 
-  ; Процедура для создания остатка пути. Обработка ошибок 
+  ; Процедура для создания остатка пути. Обработка ошибок вынесена в
+  ; нижеследующий catch
   (define (make-dirs! path)
     (let loop ((items path))
       (if (not (null? items))
         (let ((i (car items)))
-          (if (not (or (equal? "." i) (equal? ".." i))) (mkdir i #o700))
+          (mkdir i)
           (chdir i)
           (loop (cdr items))))))
 
-  (make-dirs! (into-dirs! (split-path path))))
+  (catch
+    #t
+    (lambda ()
+      (let ((cwd (getcwd))
+            (items (split-path path)))
+        (display cwd)
+        (newline)
+        (display items)
+        (newline)
+        (if (path-correct? items)
+          (into-dirs! (make-dirs! items))
+          (throw 'internal "incorrect path"))
+        (chdir cwd)))
+
+    (lambda (key . args)
+      (case (symbol->keyword key)
+        ((#:system-error)
+         (let ((errstr (strerror (system-error-errno (cons key args)))))
+           (format (current-error-port) "ensure-path: ~a: ~a~%" errstr path)))
+        
+        ((#:internal)
+         (format (current-error-port) "ensure-path: ~a: ~a~%" (car args) path))))))
