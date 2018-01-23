@@ -44,29 +44,43 @@
     (let loop ((items path))
       (if (not (null? items))
         (let ((i (car items)))
-          (mkdir i)
+          (mkdir i #o700)
           (chdir i)
           (loop (cdr items))))))
 
-  (catch
-    #t
-    (lambda ()
-      (let ((cwd (getcwd))
-            (items (split-path path)))
-        (display cwd)
-        (newline)
-        (display items)
-        (newline)
-        (if (path-correct? items)
-          (into-dirs! (make-dirs! items))
-          (throw 'internal "incorrect path"))
-        (chdir cwd)))
+  ; Универсальный обработчик исключения на два случая жизни: на случай системных
+  ; ошибок, и на случай внутренних для ensure-path! ошибок. Для того, чтобы
+  ; сломать вызывающий make в нужном месте, возвращается строчка "false",
+  ; интерпретация которой приведёт к прерыванию исполнения цепочки команд
+  ; рецепта
 
-    (lambda (key . args)
-      (case (symbol->keyword key)
-        ((#:system-error)
-         (let ((errstr (strerror (system-error-errno (cons key args)))))
-           (format (current-error-port) "ensure-path: ~a: ~a~%" errstr path)))
-        
-        ((#:internal)
-         (format (current-error-port) "ensure-path: ~a: ~a~%" (car args) path))))))
+  (define (handler key . args)
+    (case (symbol->keyword key)
+      ((#:system-error)
+       (let ((errstr (strerror (system-error-errno (cons key args)))))
+         (format (current-error-port) "ensure-path!: ~a: ~a~%" errstr path)))
+
+      ((#:internal)
+       (format (current-error-port) "ensure-path!: ~a: ~a~%" (car args) path)))
+
+    "false")
+
+  ; Основная работа. Нужно гарантировать вызов (chdir cwd) по завершении работы,
+  ; вне зависимости от возникших ошибок. Поэтому код обёрнут в два catch.
+  ; Внешний ловит ошибки getcwd.
+
+  (catch
+    'system-error
+    (lambda ()
+      (let* ((cwd (getcwd))
+             (items (split-path path))
+             (r (catch
+                  #t
+                  (lambda () (if (path-correct? items)
+                               (begin (make-dirs! (into-dirs! items))
+                                      "true")
+                               (throw 'internal "incorrect path")))
+                  handler)))
+        (chdir cwd)
+        r))
+    handler))
