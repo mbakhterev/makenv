@@ -84,3 +84,23 @@
         (chdir cwd)
         r))
     handler))
+
+; Запоминание некоторых координат в файловой системе для последующего
+; использования
+
+; Базовая директория makenv. Определение по пути до текущего файла.
+(define base (dirname (current-filename)))
+
+; Корень дерева исходных файлов. Определяется по координатам самого первого
+; make-файла в списке
+(define root (dirname (gmk-expand "$(firstword $(MAKEFILE_LIST))")))
+
+; 
+
+
+
+(display root)
+(newline)
+
+(display (list (getenv "BDIR") (getenv "HOME")))
+(newline)
