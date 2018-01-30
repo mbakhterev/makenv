@@ -95,12 +95,9 @@
 ; make-файла в списке
 (define root (dirname (gmk-expand "$(firstword $(MAKEFILE_LIST))")))
 
-; 
+; Процедура вывода информации о выполняемом сценарии. Чтобы имитировать
+; покомандное выполнение рецептов придётся делать в стиле свободной монадки с
+; двойной передачей и интерпретацией данных. TODO: придётся так же впоследствии
+; формировать команду в зависимости от используемой оболочки.
 
-
-
-(display root)
-(newline)
-
-(display (list (getenv "BDIR") (getenv "HOME")))
-(newline)
+(define (echo job target) (format #f "echo '\t~a\t~a'" job target))
