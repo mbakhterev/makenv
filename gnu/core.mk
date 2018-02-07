@@ -39,22 +39,15 @@ I = $(bdir)/include
 suborig = $(subst file,,$(origin $(1)))
 checkdefs = $(if $(strip $(foreach v,$(1),$(call suborig,$(v)))),$(error $(2)))
 
-# Guile более стабильный в сравнении с Shell. Имеет смысл выдавать информацию
-# через него или через встроенное info в make
-#
-# ifndef echo
-# $(error echo with escape interpretation isn't defined)
-# endif
-
 $(B)/%.sh:
-	@ $(echo) '\tinstall\t$@' \
-	&& $(call mkpath,$(bdir),$(@D)) \
-	&& install -m 755 $< $@
+	@ $(guile (echo-install "$@"))
+	@ $(call mkpath,$(bdir),$(@D))
+	@ install -m 755 $< $@
 
 $(T)/%.sh:
-	@ $(echo) '\tinstall\t$@' \
-	&& $(call mkpath,$(bdir),$(@D)) \
-	&& install -m 755 $< $@
+	@ $(guile (echo-install "$@"))
+	@ $(call mkpath,$(bdir),$(@D)) 
+	@ install -m 755 $< $@
 
 ifdef cc # C/C++ Compiler rules group
 
