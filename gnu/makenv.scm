@@ -96,8 +96,20 @@
 (define root (dirname (gmk-expand "$(firstword $(MAKEFILE_LIST))")))
 
 ; Процедура вывода информации о выполняемом сценарии. Чтобы имитировать
-; покомандное выполнение рецептов придётся делать в стиле свободной монадки с
-; двойной передачей и интерпретацией данных. TODO: придётся так же впоследствии
-; формировать команду в зависимости от используемой оболочки.
+; покомандное выполнение рецептов придётся делать в стиле свободной монадки
+; (возвращаем команду, которую будет интерпретировать make) с двойной передачей
+; и интерпретацией данных. TODO: придётся так же впоследствии формировать
+; команду в зависимости от используемой оболочки.
 
 (define (echo job target) (format #f "echo '\t~a\t~a'" job target))
+
+(define-syntax make-echo
+  (let ((rename (lambda (ns) (map (lambda (n) (string->symbol (string-append "echo-" (syntax->datum n))))
+                                  ns))))
+    (lambda (x)
+      (syntax-case x ()
+        ((make-echo j ...)
+         (with-syntax (((fn ...) (datum->syntax x (rename (syntax (j ...))))))
+           (syntax (begin (define fn (lambda (target) (echo j target))) ...))))))))
+
+(make-echo "install" "cc" "dep" "dep-c++")

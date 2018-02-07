@@ -1,3 +1,5 @@
+include /home/mob/wrk/makenv/gnu/core.mk
+
 $(info $(.FEATURES))
 
 target: guile file
