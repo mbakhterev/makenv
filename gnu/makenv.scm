@@ -103,13 +103,27 @@
 
 (define (echo job target) (format #f "echo '\t~a\t~a'" job target))
 
-(define-syntax make-echo
+(define-syntax make-echoes
   (let ((rename (lambda (ns) (map (lambda (n) (string->symbol (string-append "echo-" (syntax->datum n))))
                                   ns))))
     (lambda (x)
       (syntax-case x ()
-        ((make-echo j ...)
+        ((make-echoes j ...)
          (with-syntax (((fn ...) (datum->syntax x (rename (syntax (j ...))))))
            (syntax (begin (define fn (lambda (target) (echo j target))) ...))))))))
 
-(make-echo "install" "cc" "dep" "dep-c++")
+(make-echoes "install" "cc" "dep" "dep-c++")
+
+; Процедура для проверки определённости всех переменных, перечисленных по именам
+; через пробел. В случае успеха для последующей интерпретации в make возвращает
+; "", в случае ошибки строку вида "$(error ...)", интерпретация которой завершит
+; make с ошибкой
+
+(define (check-vars group-name variables)
+  (let* ((vs (string-split variables char-set:whitespace))
+         (undefined-var? (lambda (v) (string=? "undefined" (gmk-expand (format #f "$(origin ~a)" v)))))
+         (undefined (filter undefined-var? vs)))
+    (if (not (null? undefined))
+      (gmk-eval (format #f "$(error ~a: no values for: ~a)" group-name undefined)))))
+
+; (for-each (lambda (v) (display v) (display (gmk-expand (format #f "$(origin ~a)" v))) (newline)) vs) 

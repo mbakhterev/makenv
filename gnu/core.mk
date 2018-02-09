@@ -49,10 +49,14 @@ $(T)/%.sh:
 	@ $(call mkpath,$(bdir),$(@D)) 
 	@ install -m 755 $< $@
 
-ifdef cc # C/C++ Compiler rules group
+# Группа правил для компиляции C/C++ исходников. Правила включаются, если
+# определена переменная cc. Для работы правил нужны дополнительные переменные,
+# в их определённости убеждается check-vars.
 
-vars = dep cc cstd cppstd cflags cdebug coptimization
-$(call checkdefs,$(vars),C/C++ Compiler group needs: $(vars))
+ifdef cc
+
+vars = cc dep cstd cppstd cflags cdebug coptimization
+$(guile (check-vars "C/C++ compilation group" "$(vars)"))
 
 ifeq ($(DBG), Y)
 copt = $(cdebug)

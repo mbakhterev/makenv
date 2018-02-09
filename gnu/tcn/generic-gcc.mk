@@ -1,7 +1,5 @@
-echo = echo -e
-
 cc = gcc
-cflags =  -Wall -Werror -pedantic -pipe
+cflags = -Wall -Werror -pedantic -pipe
 
 coptimization = -O3
 cdebug = -g3
