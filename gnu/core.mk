@@ -8,9 +8,13 @@ $(guile (load "$(dir $(lastword $(MAKEFILE_LIST)))/makenv.scm"))
 # наличие переменной и вычисляем физический путь до него.
 
 ifndef BDIR
-$(error build root dir is not defined)
+$(error BDIR (build root dir) is not defined)
 else
 bdir = $(shell readlink -f '$(BDIR)')
+
+# Нет желания каждый раз передавать и разбирать bdir на сторону guile. А она
+# нужна для ensure-path!, чтобы проверять корректность путей. Поэтому запоминаем
+$(guile (bdir-set! "$(bdir)"))
 endif
 
 mkpath = \
@@ -69,9 +73,9 @@ c2o = $(addprefix $(1)/,$(patsubst %.c,%.o,$(2)))
 cpp2o = $(addprefix $(1)/,$(patsubst %.cpp,%.o,$(2)))
 
 $(bits)/%.d: %.c
-	@ $(echo) '\tdep\t$@' \
-	&& $(call mkpath,$(bdir),$(@D)) \
-	&& $(dep) $(cflags) -x c -std=$(cstd) -MM $< \
+	@ $(guile (echo-dep "$@"))
+	@ $(call mkpath,$(bdir),$(@D))
+	@ $(dep) $(cflags) -x c -std=$(cstd) -MM $< \
 		| $(call sub,$(*F).o,$(@D)/$(*F).o $@) > $@
 
 $(bits)/%.d: %.cpp
@@ -111,7 +115,7 @@ $(I)/$1/%.h: $2/%.h
 	&& install -m 755 $$< $$@
 endef
 
-endif # C/C++ Compiler group
+endif # группа правил компиляции C/C++
 
 ifdef lnk # LiNK group
 

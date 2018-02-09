@@ -1,18 +1,33 @@
 (use-modules (ice-9 format))
 
+; Вычисление описания системной ошибки по информации об исключении
+(define (error-string key args) (strerror (system-error-errno (cons key args))))
+
+; Процедура для разбиения пути на элементы
+(define (split-path path)
+  (let ((items (filter (compose not string-null?)
+                       (string-split path file-name-separator?))))
+    (if (absolute-file-name? path)
+      (cons file-name-separator-string items)
+      items))) 
+
+(define bdir "")
+(define bdir-items '())
+
+(define (bdir-set! path)
+  (catch
+    'system-error
+    (lambda ()
+      (set! bdir path)
+      (set! bdir-items (split-path path)))
+    (lambda error '())
+    ))
+
 ; Процедура убеждающаяся в доступности директории по указанному пути. Если
 ; компоненты пути не созданы, она их создаёт. Аналог mkdir -p 
 
 (define (ensure-path! path)
   ; Вспомогательные процедуры
-
-  ; Процедура для разбиения пути на элементы
-  (define (split-path path)
-    (let ((items (filter (compose not string-null?)
-                         (string-split path file-name-separator?))))
-      (if (absolute-file-name? path)
-        (cons file-name-separator-string items)
-        items)))
 
   ; Проверка корректности пути. Разрешаем только те, что не ведут обратно вверх,
   ; и не содержат повторений текущей директории.
