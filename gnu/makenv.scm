@@ -11,17 +11,23 @@
       (cons file-name-separator-string items)
       items))) 
 
+; Остановка make по ошибке. Возврат "$(error ...)" не срабатывает -- make
+; интерпретирует возвращаемые строки как правила.
+(define (gmk-error fmt . vals)
+  (gmk-eval (string-append "$(error " (apply format #f fmt vals) ")")))
+
+; Переменные для хранения директории, в которой всё собирается.
 (define bdir "")
 (define bdir-items '())
 
+(define do-error (lambda () (gmk-error "$(call error, hi)")))
+
+; Процедура запоминает целевую директорию для сборки, предварительно проверяя её
+; доступность. Ошибка в make вызывается через gmk-error. Простой возврат строки
+; не работает.
+
 (define (bdir-set! path)
-  (catch
-    'system-error
-    (lambda ()
-      (set! bdir path)
-      (set! bdir-items (split-path path)))
-    (lambda error '())
-    ))
+  (format #f "hi: error"))
 
 ; Процедура убеждающаяся в доступности директории по указанному пути. Если
 ; компоненты пути не созданы, она их создаёт. Аналог mkdir -p 
@@ -139,6 +145,6 @@
          (undefined-var? (lambda (v) (string=? "undefined" (gmk-expand (format #f "$(origin ~a)" v)))))
          (undefined (filter undefined-var? vs)))
     (if (not (null? undefined))
-      (gmk-eval (format #f "$(error ~a: no values for: ~a)" group-name undefined)))))
+      (gmk-error "~a: undefined variables: ~a)" group-name undefined))))
 
 ; (for-each (lambda (v) (display v) (display (gmk-expand (format #f "$(origin ~a)" v))) (newline)) vs) 
