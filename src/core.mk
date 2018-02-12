@@ -1,8 +1,7 @@
 # Удобнее написать вспомогательные функции на более дружелюбном языке, чем язык
 # функций make с асинхронной семантикой. Использую встроенную поддержку Guile
 # Scheme
-
-$(guile (load "$(dir $(lastword $(MAKEFILE_LIST)))/makenv.scm"))
+$(guile (load "$(dir $(lastword $(MAKEFILE_LIST)))makenv.scm"))
 
 # Для успешной работы должна быть задана директория для сборки. Проверяем
 # наличие переменной и вычисляем физический путь до него.
@@ -18,12 +17,13 @@ bdir = $(shell readlink -f '$(BDIR)')
 $(guile (bdir-set! "$(bdir)"))
 endif
 
-mkpath = \
-	{ test -d '$(1)' \
-		|| { echo 'error: no build dir: $(1)' 1>&2; false; }; } \
-	&& { test -d $(2) || mkdir -p '$(2)'; }
+# mkpath = \
+# 	{ test -d '$(1)' \
+# 		|| { echo 'error: no build dir: $(1)' 1>&2; false; }; } \
+# 	&& { test -d $(2) || mkdir -p '$(2)'; }
 
 bits = $(bdir)/B
+
 rootpath = $(patsubst %/,%,$(dir $(firstword $(MAKEFILE_LIST))))
 nodepath = $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
 bitspath = $(bits)/$(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
@@ -46,12 +46,12 @@ I = $(bdir)/include
 
 $(B)/%.sh:
 	@ $(guile (echo-install "$@"))
-	@ $(call mkpath,$(bdir),$(@D))
+	@ $(guile (ensure-path! "$(@D)"))
 	@ install -m 755 $< $@
 
 $(T)/%.sh:
 	@ $(guile (echo-install "$@"))
-	@ $(call mkpath,$(bdir),$(@D)) 
+	@ $(guile (ensure-path! "$(@D)")) 
 	@ install -m 755 $< $@
 
 # Группа правил для компиляции C/C++ исходников. Правила включаются, если
