@@ -144,7 +144,8 @@
 (define root (dirname (gmk-expand "$(firstword $(MAKEFILE_LIST))")))
 
 ; Определение пути до текущего файла
-(define (nodepath) (dirname "$(lastword $(MAKEFILE_LIST))"))
+(define (nodepath) (dirname (gmk-expand "$(lastword $(MAKEFILE_LIST))")))
+(define (bitspath) (string-append (gmk-expand "$(bits)") "/" (nodepath)))
 
 ; Процедура вывода информации о выполняемом сценарии. Чтобы имитировать
 ; покомандное выполнение рецептов придётся делать в стиле свободной монадки
@@ -177,4 +178,25 @@
 
 ; (for-each (lambda (v) (display v) (display (gmk-expand (format #f "$(origin ~a)" v))) (newline)) vs) 
 
+; Перевод списка файлов в другой список с добавкой префикса и заменой
+; расширения. Если префикс или расширение заданы пустыми строками, то
+; соответствующее преобразование не осуществляется
 
+(define (reform-paths paths prefix ext)
+  ; Процедура возвращает подстроку без расширения - последней, начинающийся с
+  ; точки подстроки
+
+  (define (cut-ext str)
+    (let ((dotpos (or (string-rindex str #\.) (string-length str))))
+      (substring/read-only str 0 dotpos)))
+
+  ; Порождение функции трансформации, чтобы не вычислять if-ы при обработке
+  ; каждого элемента
+
+  (define (mk-transform prefix ext)
+    (compose (if (string-null? prefix) identity (lambda (str) (string-append prefix "/" str)))
+             (if (string-null? ext) identity (lambda (str) (string-append (cut-ext str) "." ext)))))
+
+  ; Make должна автоматически подхватить список и превратить его в строку слов
+  (map (mk-transform prefix ext)
+       (filter (compose not string-null?) (string-split paths char-set:whitespace))))
