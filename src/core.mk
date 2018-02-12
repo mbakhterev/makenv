@@ -12,8 +12,9 @@ $(error BDIR (build root dir) is not defined)
 else
 bdir = $(shell readlink -f '$(BDIR)')
 
-# Нет желания каждый раз передавать и разбирать bdir на сторону guile. А она
-# нужна для ensure-path!, чтобы проверять корректность путей. Поэтому запоминаем
+# Нет желания каждый раз передавать bdir на сторону guile, разбирать и проверять
+# наличие директории. А это нужно для логики ensure-path!, чтобы проверять
+# корректность путей. Поэтому запоминаем
 $(guile (bdir-set! "$(bdir)"))
 endif
 
@@ -40,8 +41,8 @@ T = $(bdir)/tst
 L = $(bdir)/lib
 I = $(bdir)/include
 
-suborig = $(subst file,,$(origin $(1)))
-checkdefs = $(if $(strip $(foreach v,$(1),$(call suborig,$(v)))),$(error $(2)))
+# suborig = $(subst file,,$(origin $(1)))
+# checkdefs = $(if $(strip $(foreach v,$(1),$(call suborig,$(v)))),$(error $(2)))
 
 $(B)/%.sh:
 	@ $(guile (echo-install "$@"))

@@ -1,7 +1,13 @@
 (use-modules (ice-9 format))
 
 ; Вычисление описания системной ошибки по информации об исключении
-(define (error-string key args) (strerror (system-error-errno (cons key args))))
+(define (error-string fn-name path key args)
+  (case (symbol->keyword key)
+    ((#:system-error)
+     (let ((errstr (strerror (system-error-errno (cons 'system-error args)))))
+       (format #f "~a: ~a: ~a" fn-name path errstr)))
+    ((#:internal)
+     (format #f "~a: ~a: ~a" fn-name path (car args)))))
 
 ; Процедура для разбиения пути на элементы
 (define (split-path path)
@@ -20,14 +26,21 @@
 (define bdir "")
 (define bdir-items '())
 
-(define do-error (lambda () (gmk-error "$(call error, hi)")))
-
 ; Процедура запоминает целевую директорию для сборки, предварительно проверяя её
-; доступность. Ошибка в make вызывается через gmk-error. Простой возврат строки
-; не работает.
+; доступность. Если проверка не пройдена, то bdir-set! вызывает ошибку в make.
 
 (define (bdir-set! path)
-  (format #f "hi: error"))
+  (define (handler key . args)
+    (gmk-error (error-string 'bdir-set! path key args)))
+
+  (catch #t
+         (lambda () (let ((st (stat path)))
+                      (if (and (eqv? 'directory (stat:type st))
+                               (eqv? #o700 (logand #o700 (stat:mode st))))
+                        (begin (set! bdir path)
+                               (set! bdir-items (split-path path)))
+                        (throw 'internal "is not accessible (700) directory"))))
+         handler))
 
 ; Процедура убеждающаяся в доступности директории по указанному пути. Если
 ; компоненты пути не созданы, она их создаёт. Аналог mkdir -p 
