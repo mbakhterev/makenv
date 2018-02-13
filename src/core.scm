@@ -139,13 +139,17 @@
 ; Базовая директория makenv. Определение по пути до текущего файла.
 (define base (dirname (current-filename)))
 
+; Положение вспомогательного скрипта
+
+(define runscm-path (string-append base file-name-separator-string "run.scm"))
+
 ; Корень дерева исходных файлов. Определяется по координатам самого первого
 ; make-файла в списке
 (define root (dirname (gmk-expand "$(firstword $(MAKEFILE_LIST))")))
 
 ; Определение пути до текущего файла
 (define (nodepath) (dirname (gmk-expand "$(lastword $(MAKEFILE_LIST))")))
-(define (bitspath) (string-append (gmk-expand "$(bits)") "/" (nodepath)))
+(define (bitspath) (string-append (gmk-expand "$(bits)") file-name-separator-string (nodepath)))
 
 ; Процедура вывода информации о выполняемом сценарии. Чтобы имитировать
 ; покомандное выполнение рецептов придётся делать в стиле свободной монадки
@@ -178,25 +182,26 @@
 
 ; (for-each (lambda (v) (display v) (display (gmk-expand (format #f "$(origin ~a)" v))) (newline)) vs) 
 
+; Процедура возвращает подстроку без расширения - суффикса, начинающегося с «.»
+(define (drop-ext str)
+  (let ((dotpos (or (string-rindex str #\.) (string-length str))))
+    (substring/read-only str 0 dotpos))) 
+
 ; Перевод списка файлов в другой список с добавкой префикса и заменой
 ; расширения. Если префикс или расширение заданы пустыми строками, то
 ; соответствующее преобразование не осуществляется
 
 (define (reform-paths paths prefix ext)
-  ; Процедура возвращает подстроку без расширения - последней, начинающийся с
-  ; точки подстроки
-
-  (define (cut-ext str)
-    (let ((dotpos (or (string-rindex str #\.) (string-length str))))
-      (substring/read-only str 0 dotpos)))
-
-  ; Порождение функции трансформации, чтобы не вычислять if-ы при обработке
-  ; каждого элемента
-
+  ; Порождение функции редактирования, дабы не считать if для каждого пути
   (define (mk-transform prefix ext)
-    (compose (if (string-null? prefix) identity (lambda (str) (string-append prefix "/" str)))
-             (if (string-null? ext) identity (lambda (str) (string-append (cut-ext str) "." ext)))))
+    (compose (if (string-null? prefix) identity (lambda (str) (string-append prefix
+                                                                             file-name-separator-string
+                                                                             str)))
+             (if (string-null? ext) identity (lambda (str) (string-append (drop-ext str) "." ext)))))
 
   ; Make должна автоматически подхватить список и превратить его в строку слов
   (map (mk-transform prefix ext)
        (filter (compose not string-null?) (string-split paths char-set:whitespace))))
+
+(define (fix-deps cmd target)
+  #f)

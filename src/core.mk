@@ -1,7 +1,9 @@
 # Удобнее написать вспомогательные функции на более дружелюбном языке, чем язык
-# функций make с асинхронной семантикой. Использую встроенную поддержку Guile
-# Scheme
-$(guile (load "$(dir $(lastword $(MAKEFILE_LIST)))makenv.scm"))
+# функций make с асинхронной (совсем не RiDE) семантикой. Использую встроенную
+# поддержку Guile Scheme
+
+$(guile (load "$(dir $(lastword $(MAKEFILE_LIST)))core.scm"))
+runscm-path := $(guile runscm-path)
 
 # Для успешной работы должна быть задана директория для сборки. Проверяем
 # наличие переменной и вычисляем физический путь до него.
@@ -16,11 +18,6 @@ bdir = $(shell readlink -f '$(BDIR)')
 # корректность путей. Поэтому запоминаем
 $(guile (bdir-set! "$(bdir)"))
 endif
-
-# mkpath = \
-# 	{ test -d '$(1)' \
-# 		|| { echo 'error: no build dir: $(1)' 1>&2; false; }; } \
-# 	&& { test -d $(2) || mkdir -p '$(2)'; }
 
 bits = $(bdir)/B
 
@@ -43,6 +40,12 @@ I = $(bdir)/include
 
 # suborig = $(subst file,,$(origin $(1)))
 # checkdefs = $(if $(strip $(foreach v,$(1),$(call suborig,$(v)))),$(error $(2)))
+
+# О специальных переменных в make:
+#
+#   @  - путь до текущей цели
+#   @D - имя директории текущей цели
+#   *F - имя исходного файла
 
 $(B)/%.sh:
 	@ $(guile (echo-install "$@"))
@@ -73,11 +76,20 @@ o2d = $(patsubst %.o,%.d,$(1))
 c2o = $(addprefix $(1)/,$(patsubst %.c,%.o,$(2)))
 cpp2o = $(addprefix $(1)/,$(patsubst %.cpp,%.o,$(2)))
 
+# $(bits)/%.d: %.c
+# 	@ $(guile (echo-dep "$@"))
+# 	@ $(guile (ensure-path! "$(@D)"))
+# 	@ $(dep) $(cflags) -x c -std=$(cstd) -MM $< \
+# 		| $(call sub,$(*F).o,$(@D)/$(*F).o $@) > $@
+
+# Компиляторы С/С++ вычисляют зависимости в довольно неудобной логике. Поэтому
+# необходимо редактирование результатов. Это делает процедура fix-deps,
+# пропуская через себя вывод указанной программы
+
 $(bits)/%.d: %.c
 	@ $(guile (echo-dep "$@"))
 	@ $(guile (ensure-path! "$(@D)"))
-	@ $(dep) $(cflags) -x c -std=$(cstd) -MM $< \
-		| $(call sub,$(*F).o,$(@D)/$(*F).o $@) > $@
+	@ $(guile (fix-deps "$(dep) $(cflags) -x c -std=$(cstd) -MM '$<'" "$@"))
 
 $(bits)/%.d: %.cpp
 	@ $(guile (echo-dep-c++ "$@")) 
