@@ -1,4 +1,5 @@
-(use-modules (ice-9 format))
+(use-modules (ice-9 popen))
+(use-modules (ice-9 rdelim))
 
 ; Вычисление описания системной ошибки по информации об исключении
 (define (error-string fn-name path key args)
@@ -203,5 +204,36 @@
   (map (mk-transform prefix ext)
        (filter (compose not string-null?) (string-split paths char-set:whitespace))))
 
+; Функция должна прочитать результат cmd (которая должна быть командой запуска
+; компилятора с опциями для генерации зависимостей исходного .c или .cpp файла),
+; и модифицировать его с учётом makenv. Для этого нужно открыть два порта и
+; обработать, следовательно, два исключения. Неудобно. Возможно, я
+; перестраховщик
+
 (define (fix-deps cmd target)
-  #f)
+  (define (handler item on-error)
+    (lambda (key . args)
+      (format (current-error-port) "~s" (error-string 'ensure-path! item key args))
+      on-error))
+
+  (define (intercepting-apply fn arg) (catch 'system-error (lambda () (fn arg)) (handler arg #f)))
+
+  (let* ((t (intercepting-apply open-output-file target))
+         (c (intercepting-apply open-input-pipe cmd)))
+    (cond ((not (port? t)) "false")
+          ((not (port? c)) (close-port t) "false")
+          (else (let ((r (catch
+                           'system-error
+                           (lambda ()
+                             (let lp ((l (read-line c)))
+                               (if (eof-object? l)
+                                 "true"
+                                 (begin (format t "~a~%" l)
+                                        (lp (read-line c))))))
+                           (handler (string-append "processing | " cmd) "false"))))
+                  (close-port t)
+                  (close-port c)
+                  r))    
+    )
+    ))
+
