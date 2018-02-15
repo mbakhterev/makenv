@@ -87,9 +87,9 @@ cpp2o = $(addprefix $(1)/,$(patsubst %.cpp,%.o,$(2)))
 # пропуская через себя вывод указанной программы
 
 $(bits)/%.d: %.c
-	$(guile (echo-dep "$@"))
-	$(guile (ensure-path! "$(@D)"))
-	$(guile (fix-deps "$(dep) $(cflags) -x c -std=$(cstd) -MG '$<'" "$@"))
+	@ $(guile (echo-dep "$@"))
+	@ $(guile (ensure-path! "$(@D)"))
+	@ $(guile (fix-deps "$(dep) $(cflags) -x c -std=$(cstd) -MG '$<'" "$@"))
 
 $(bits)/%.d: %.cpp
 	@ $(guile (echo-dep-c++ "$@")) 

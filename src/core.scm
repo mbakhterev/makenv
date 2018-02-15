@@ -212,6 +212,10 @@
 ; перестраховщик
 
 (define (fix-deps cmd target)
+  ; Префикс, который надо добавить к целям в .d-файле, определяется по пути к
+  ; цели.
+  (define dir (dirname target))
+
   ; Функция обработки одной строки. Не хочется в ней работать с портами, поэтому
   ; она обрабатывает только строки. Параметр state - то, в каком состоянии
   ; работает процедура: #:start -- начало make-правила, ожидание строки,
@@ -221,9 +225,20 @@
   ; нужно) строки.
 
   (define (fix-string state str)
+    (define (next-state str) (if (eqv? #\\ (string-ref str (- (string-length str) 1))) #:copy #:start))
+
+    (define (reformat str colpos)
+      (let* ((objname (substring/read-only str 0 colpos))
+             (justname (drop-ext objname))
+             (prereqs (substring/read-only str colpos)))
+        (format #f "~a/~a ~a/~a.d~a" dir objname dir justname prereqs)))
+
     (case state
-      ((#:start) (vector state str))
-      ((#:copy) (vector state str))))
+      ((#:start) (let ((colpos (string-index str #\:)))
+                   (if (not colpos)
+                     (vector #:no-target str)
+                     (vector (next-state str) (reformat str colpos)))))
+      ((#:copy) (vector (next-state str) str))))
 
   ; Генерация параметризованного обработчика исключений для красивых сообщений
   ; об ошибках
@@ -247,11 +262,14 @@
                                (if (eof-object? l)
                                  "true"
                                   (match (fix-string st l)
-                                    (#(state str) (format t str) (lp state (read-line c)))))))
+                                    (#(state str)
+                                     (if (eqv? state #:no-target)
+                                       "false"
+                                       (begin
+                                         (format t "~a~%" str)
+                                         (lp state (read-line c)))))))))
                            (handler (string-append "| " cmd) "false"))))
                   (close-port t)
                   (close-port c)
-                  r))    
-    )
-    ))
+                  r)))))
 
