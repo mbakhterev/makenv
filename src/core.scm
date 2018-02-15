@@ -170,7 +170,7 @@
          (with-syntax (((fn ...) (datum->syntax x (rename (syntax (j ...))))))
            (syntax (begin (define fn (lambda (target) (echo j target))) ...))))))))
 
-(make-echoes "install" "cc" "dep" "dep-c++")
+(make-echoes "install" "dep" "dep/gen" "dep-c++" "c" "c/gen" "c++" "h" "h/gen")
 
 ; Процедура для проверки определённости всех переменных, перечисленных по именам
 ; через пробел. 
@@ -193,7 +193,7 @@
 ; расширения. Если префикс или расширение заданы пустыми строками, то
 ; соответствующее преобразование не осуществляется
 
-(define (reform-paths paths prefix ext)
+(define (reform paths prefix ext)
   ; Порождение функции редактирования, дабы не считать if для каждого пути
   (define (mk-transform prefix ext)
     (compose (if (string-null? prefix) identity (lambda (str) (string-append prefix
@@ -204,6 +204,10 @@
   ; Make должна автоматически подхватить список и превратить его в строку слов
   (map (mk-transform prefix ext)
        (filter (compose not string-null?) (string-split paths char-set:whitespace))))
+
+; Специальные варианты reform. Для уменьшения потока данных между guile и make.
+(define (f2o prefix paths) (reform paths prefix "o"))
+(define (f2d paths) (reform paths "" "d"))
 
 ; Функция должна прочитать результат cmd (которая должна быть командой запуска
 ; компилятора с опциями для генерации зависимостей исходного .c или .cpp файла),
