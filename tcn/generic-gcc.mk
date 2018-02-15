@@ -7,7 +7,7 @@ cdebug = -g3
 cstd = c1x
 cppstd = c++0x
 
-dep = $(cc)
+dep = $(cc) -M
 
 lnk = gcc
 lflags = -pipe

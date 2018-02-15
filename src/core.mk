@@ -89,7 +89,7 @@ cpp2o = $(addprefix $(1)/,$(patsubst %.cpp,%.o,$(2)))
 $(bits)/%.d: %.c
 	$(guile (echo-dep "$@"))
 	$(guile (ensure-path! "$(@D)"))
-	$(guile (fix-deps "$(dep) $(cflags) -x c -std=$(cstd) -MM '$<'" "$@"))
+	$(guile (fix-deps "$(dep) $(cflags) -x c -std=$(cstd) -MG '$<'" "$@"))
 
 $(bits)/%.d: %.cpp
 	@ $(guile (echo-dep-c++ "$@")) 

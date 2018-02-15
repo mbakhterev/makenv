@@ -1,5 +1,6 @@
 (use-modules (ice-9 popen))
 (use-modules (ice-9 rdelim))
+(use-modules (ice-9 match))
 
 ; Вычисление описания системной ошибки по информации об исключении
 (define (error-string fn-name path key args)
@@ -211,6 +212,22 @@
 ; перестраховщик
 
 (define (fix-deps cmd target)
+  ; Функция обработки одной строки. Не хочется в ней работать с портами, поэтому
+  ; она обрабатывает только строки. Параметр state - то, в каком состоянии
+  ; работает процедура: #:start -- начало make-правила, ожидание строки,
+  ; разделённой двоеточием на цель и предпосылки; #:copy -- копирование строк,
+  ; описывающих предпосылки, связанных вместе символом переноса строки \.
+  ; Функция возвращает пару из следующего состояния и преобразованной (если
+  ; нужно) строки.
+
+  (define (fix-string state str)
+    (case state
+      ((#:start) (vector state str))
+      ((#:copy) (vector state str))))
+
+  ; Генерация параметризованного обработчика исключений для красивых сообщений
+  ; об ошибках
+
   (define (handler item on-error)
     (lambda (key . args)
       (format (current-error-port) "~s" (error-string 'ensure-path! item key args))
@@ -225,12 +242,13 @@
           (else (let ((r (catch
                            'system-error
                            (lambda ()
-                             (let lp ((l (read-line c)))
+                             (let lp ((st #:start)
+                                      (l (read-line c)))
                                (if (eof-object? l)
                                  "true"
-                                 (begin (format t "~a~%" l)
-                                        (lp (read-line c))))))
-                           (handler (string-append "processing | " cmd) "false"))))
+                                  (match (fix-string st l)
+                                    (#(state str) (format t str) (lp state (read-line c)))))))
+                           (handler (string-append "| " cmd) "false"))))
                   (close-port t)
                   (close-port c)
                   r))    
