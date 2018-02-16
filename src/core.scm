@@ -182,7 +182,10 @@
          (with-syntax (((fn ...) (datum->syntax x (rename (syntax (j ...))))))
            (syntax (begin (define fn (lambda (target) (echo j target))) ...))))))))
 
-(make-echoes "install" "dep" "dep/gen" "dep-c++" "c" "c/gen" "c++" "h" "h/gen")
+(make-echoes "install"
+             "dep" "dep/gen" "dep-c++" "c" "c/gen" "c++" "h" "h/gen"
+             "link" "lib"
+             "tex" "xetex")
 
 ; Процедура для проверки определённости всех переменных, перечисленных по именам
 ; через пробел. 

@@ -140,19 +140,23 @@ $(bits)/%.h: %.h
 	@ $(guile (ensure-path! "$(@D)"))
 	@ install -m 755 $< $@
 
-define headroute-m
-$(I)/$1/%.h: $2/%.h
-	@ $(echo) '\theader\t$$@' \
-	&& $(call mkpath,$(bdir),$$(@D)) \
-	&& install -m 755 $$< $$@
-endef
+# define headroute-m
+# $(I)/$1/%.h: $2/%.h
+# 	@ $(echo) '\theader\t$$@' \
+# 	&& $(call mkpath,$(bdir),$$(@D)) \
+# 	&& install -m 755 $$< $$@
+# endef
 
 endif # группа правил компиляции C/C++
+
+# Группа правил для сборки объектных файлов. FIXME: почему отдельно от C/C++?
 
 ifdef lnk # LiNK group
 
 vars = lnk lflags ldebug loptimization ar
-$(call checkdefs,$(vars),LiNK group needs: $(vars))
+$(guile (check-vars "link group" "$(vars)"))
+
+# $(call checkdefs,$(vars),LiNK group needs: $(vars))
 
 ifeq ($(DBG), Y)
 lflags += $(ldebug)
@@ -161,22 +165,21 @@ lflags += $(loptimization)
 endif
 
 $(B)/%:
-	@ $(echo) '\tlink\t$@' \
-	&& $(call mkpath,$(bdir),$(@D)) \
-	&& $(lnk) $^ -o $@ $(lflags) 
+	@ $(guile (echo-link "$@"))
+	@ $(guile (ensure-path! "$(@D)"))
+	@ $(lnk) $^ -o $@ $(lflags) 
 
 $(T)/%:
-	@ $(echo) '\tlink\t$@' \
-	&& $(call mkpath,$(bdir),$(@D)) \
-	&& $(lnk) $^ -o $@ $(lflags)
+	@ $(guile (echo-link "$@"))
+	@ $(guile (ensure-path! "$(@D)"))
+	@ $(lnk) $^ -o $@ $(lflags)
 
 $(L)/%.a:
-	@ $(echo) '\tlib\t$@' \
-	&& $(call mkpath,$(bdir),$(@D)) \
-	&& { [ -f '$@' ] && rm $@ || true; } \
-	&& $(ar) rc $@ $^
+	@ $(guile (echo-lib "$@"))
+	@ $(guile (ensure-path! "$(@D)"))
+	@ $(ar) cr $@ $^
 
-endif
+endif # группа правил сборки объектных файлов
 
 ifdef lex
 
