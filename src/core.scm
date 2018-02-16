@@ -182,10 +182,11 @@
          (with-syntax (((fn ...) (datum->syntax x (rename (syntax (j ...))))))
            (syntax (begin (define fn (lambda (target) (echo j target))) ...))))))))
 
+; FIXME: названия могут быть не самыми удачными
 (make-echoes "install"
              "dep" "dep/gen" "dep-c++" "c" "c/gen" "c++" "h" "h/gen"
              "link" "lib"
-             "tex" "xetex")
+             "tex" "xtex" "tex/cnv" "xtex/cp" "sty/cnv")
 
 ; Процедура для проверки определённости всех переменных, перечисленных по именам
 ; через пробел. 
@@ -292,14 +293,22 @@
                   (close-port c)
                   r)))))
 
-; Генерация правила для копирования нужных заголовочных файлов в целевую
-; include-директорию. Процедура просто вычисляет нужную строку. Результат нужно
-; обрабатывать при помощи $(eval ...) по месту вызова процедуры
+; Генерация правил для управления разнообразным копированием файлов с изменением
+; структуры путей: процедуры x-route. Нужно, например, для выдёргивания h-файлов
+; в целевую директорию include. Процедура просто вычисляет нужную строку.
+; Результат нужно обрабатывать при помощи $(eval ...) по месту вызова процедуры.
+; FIXME: Проще не получается
 
-(define (headroute target source)
+
+
+(define enpath-string )
+(define echo-string (lambda (job) (format #f "@ $(guile (echo-~a \"$@\"))" job)))
+(define iconv-string "@ itconv -t $(texcode) < '$<' > '$@'")
+
+(define (h-route target source)
   (define (headline target source)
     (let ((/ file-name-separator-string))
-      (string-append "$(I)" / target / "%.h: " source / "%.h")))
+      (string-append I / target / "%.h: " source / "%.h"))) 
 
   (with-output-to-string
     (lambda ()
@@ -314,3 +323,26 @@
 ;               "@ $(guile (echo-h \"$@\"))"
 ;               "@ $(guile (ensure-path! \"$(@D)\"))"
 ;               "@ install -m 755 '$<' '$@'")
+
+(define (bib-route target source)
+  (with-output-to-string
+    (lambda ()
+      (format #t "~a~%~/~a~%~/~a~%~/~a~%"
+              (headline "$(B)" target source "bib")
+              (echo-string "bib/cnv")
+              enpath-string
+              iconv-string))))
+
+(define (sty-route target source)
+  (define (headline target source)
+    (let ((\ file-name-separator-string))
+      (string-append I \ target \ "%.h: " source \ "%.h")))
+
+  (with-output-to-string
+    (lambda ()
+      (format #t "~a~%~/~a~%~/~a~%~/~a~%"
+              (headline "$(B)" target source "sty")
+              (echo-string "sty/cnv")
+              enpath-string
+              iconv-string))))
+

@@ -140,6 +140,11 @@ $(bits)/%.h: %.h
 	@ $(guile (ensure-path! "$(@D)"))
 	@ install -m 755 $< $@
 
+# $(I)/%.h:
+# 	@ $(guile (echo-h "$@"))
+# 	@ $(guile (ensure-path! "$(@D)"))
+# 	@ install -m 755 '$^' '$@'
+
 # define headroute-m
 # $(I)/$1/%.h: $2/%.h
 # 	@ $(echo) '\theader\t$$@' \
@@ -151,7 +156,7 @@ endif # группа правил компиляции C/C++
 
 # Группа правил для сборки объектных файлов. FIXME: почему отдельно от C/C++?
 
-ifdef lnk # LiNK group
+ifdef lnk
 
 vars = lnk lflags ldebug loptimization ar
 $(guile (check-vars "link group" "$(vars)"))
@@ -181,58 +186,61 @@ $(L)/%.a:
 
 endif # группа правил сборки объектных файлов
 
-ifdef lex
+# Группа правил для flex/yacc. FIXME: пока не трогаю
+
+ifdef yacc
+
+vars := yacc lex
+$(guile (check-vars "Flex/YACC group" "$(vars)"))
 
 $(bits)/%.lex.c: %.l
 	@ $(echo) '\tlex\t$@' \
 	&& $(call mkpath,$(bdir),$(@D)) \
 	&& $(lex) -o $@ $<
 
-endif
-
-ifdef yacc
-
 $(bits)/%.tab.c $(bits)%.tab.h: %.y
 	@ $(echo) '\tyacc\t$@' \
 	&& $(call mkpath,$(bdir),$(@D)) \
 	&& $(yacc) -d -b '$(bits)/$*' $<
 
-endif
+endif # группа правил flex/yacc
 
-ifdef tex # LaTeX group
+# Группа правил для LaTeX и XeLaTeX
 
-vars = texcode
-$(call checkdefs,$(vars),LaTeX group needs: $(vars))
+ifdef tex 
+
+vars = bib tex xtex texcode 
+$(guile (check-vars "{Xe}LaTeX group" "$(vars)"))
+
+# $(call checkdefs,$(vars),LaTeX group needs: $(vars))
+
+$(B)/%.tex: %.tex
+	@ $(guile (echo-tex/cnv "$@"))
+	@ $(guile (ensure-path! "$(@D)"))
+	@ iconv -t $(texcode) < $< > $@
+
+$(B)/%.xtex: %.xtex
+	@ $(guile (echo-xtex/cp "$@"))
+	@ $(guile (ensure-path! "$(@D)"))
+	@ cp $< $@
+
+$(B)/%.sty: %.sty
+	@ $(guile (echo-sty/cnv "$@"))
+	@ $(guile (ensure-path! "$(@D)"))
+	@ iconv -t $(texcode) < $< > $@
+
+$(B)/%.bib: %.bib
+	@ $(guile (echo-bib/cnv "$@"))
+	@ $(guile (ensure-path! "$(@D)"))
+	@ iconv -t $(texcode) < $< > $@
+
+# Такое хитрое правило необходимо, чтобы можно было читать сообщения об ошибках
+# в другой локали
 
 $(bdir)/%.pdf: $(bdir)/%.tex
-	@ $(echo) '\ttex\t$@' \
-	&& (cd $(@D) && ($(tex) $< && $(tex) $<)) \
+	@ $(guile (echo-tex "$@"))
+	@ (cd $(@D) && ($(tex) $< && $(tex) $<)) \
 		| iconv -f $(texcode) \
 		| sed -ne 's:^$(bdir):\.:g; p'
 
-$(bdir)/%.tex: %.tex
-	@ $(echo) '\tcp\t$@' \
-	&& $(call mkpath,$(bdir),$(@D)) \
-	&& iconv -t $(texcode) < $< > $@
-
-$(bdir)/%.sty: %.sty
-	@ $(echo) '\tcp\t$@' \
-	&& $(call mkpath,$(bdir),$(@D)) \
-	&& iconv -t $(texcode) < $< > $@
-
-endif # LaTeX group
-
-ifdef xetex # XeLaTeX group
-
-$(bdir)/%.pdf: $(bdir)/%.xtex
-	@ $(echo) '\txetex\t$@' \
-	&& (cd $(@D) && ($(xetex) $< && $(tex) $<)) \
-		| sed -ne 's:^$(bdir):\.:g; p'
-
-$(bdir)/%.xtex: %.xtex
-	@ $(echo) '\tcp\t$@' \
-	&& $(call mkpath,$(bdir),$(@D)) \
-	&& cp $< $@
-
-endif # XeLaTeX group
-
+endif # группа правил {Xe}LaTeX
