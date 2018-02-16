@@ -29,6 +29,13 @@
 (define bdir "")
 (define bdir-items '())
 
+; Плюс набор переменных для часто используемых целевых директорий
+
+(define B "")
+(define I "")
+(define T "")
+(define L "")
+
 ; Процедура запоминает целевую директорию для сборки, предварительно проверяя её
 ; доступность. Если проверка не пройдена, то bdir-set! вызывает ошибку в make.
 
@@ -42,7 +49,12 @@
                  (if (and (eqv? 'directory (stat:type st))
                           (eqv? #o700 (logand #o700 (stat:mode st))))
                    (begin (set! bdir path)
-                          (set! bdir-items (split-path path)))
+                          (set! bdir-items (split-path path))
+                          (let ((/ file-name-separator-string))
+                            (set! B (string-append bdir / "bin"))
+                            (set! L (string-append bdir / "lib"))
+                            (set! I (string-append bdir / "include"))
+                            (set! T (string-append bdir / "tst"))))
                    (throw 'internal "is not accessible (700) directory"))))
     handler))
 
@@ -277,3 +289,25 @@
                   (close-port c)
                   r)))))
 
+; Генерация правила для копирования нужных заголовочных файлов в целевую
+; include-директорию. Процедура просто вычисляет нужную строку. Результат нужно
+; обрабатывать при помощи $(eval ...) по месту вызова процедуры
+
+(define (headroute target source)
+  (define (headline target source)
+    (let ((/ file-name-separator-string))
+      (string-append "$(I)" / target / "%.h: " source / "%.h")))
+
+  (with-output-to-string
+    (lambda ()
+      (format #t "~a~%~/~a~%~/~a~%~/~a~%"
+              (headline target source)
+              "@ $(guile (echo-h \"$@\"))"
+              "@ $(guile (ensure-path! \"$(@D)\"))"
+              "@ install -m 755 '$<' '$@'"))))
+
+; (format #t "~a~%~/~a~%~/~a~%~/~a~%"
+;               (headline target source)
+;               "@ $(guile (echo-h \"$@\"))"
+;               "@ $(guile (ensure-path! \"$(@D)\"))"
+;               "@ install -m 755 '$<' '$@'")

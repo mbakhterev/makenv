@@ -33,10 +33,18 @@ endif
 
 include $(guile root)/$(TCN).mk
 
-B = $(bdir)/bin
-T = $(bdir)/tst
-L = $(bdir)/lib
-I = $(bdir)/include
+# B := $(bdir)/bin
+# T := $(bdir)/tst
+# L := $(bdir)/lib
+# I := $(bdir)/include
+
+# FIXME: это хак, чтобы согласовать переменные в guile и make. Автоматически это
+# согласование плохо работает, при возврате строк из guile для обработки в make.
+
+B := $(guile B)
+T := $(guile T)
+L := $(guile L)
+I := $(guile I)
 
 # suborig = $(subst file,,$(origin $(1)))
 # checkdefs = $(if $(strip $(foreach v,$(1),$(call suborig,$(v)))),$(error $(2)))
@@ -132,7 +140,7 @@ $(bits)/%.h: %.h
 	@ $(guile (ensure-path! "$(@D)"))
 	@ install -m 755 $< $@
 
-define headroute
+define headroute-m
 $(I)/$1/%.h: $2/%.h
 	@ $(echo) '\theader\t$$@' \
 	&& $(call mkpath,$(bdir),$$(@D)) \
