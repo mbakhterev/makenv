@@ -302,14 +302,14 @@
 ; $(eval ...) по месту вызова.
 
 (define (h-route target)
-  (define (headline target)
+  (define headline
     (let ((\ file-name-separator-string))
-      (string-append I \ target \ "%.h: " (nodepath) \ "%.h"))) 
+      (string-append I \ target \ "%.h: " (nodepath) \ "%.h")))
 
   (with-output-to-string
     (lambda ()
       (format #t "~a~%~/~a~%~/~a~%~/~a~%"
-              (headline target)
+              headline
               "@ $(guile (echo-h \"$@\"))"
               "@ $(guile (ensure-path! \"$(@D)\"))"
               "@ install -m 755 '$<' '$@'"))))
@@ -319,29 +319,29 @@
 ;               "@ $(guile (echo-h \"$@\"))"
 ;               "@ $(guile (ensure-path! \"$(@D)\"))"
 ;               "@ install -m 755 '$<' '$@'")
-
-(define (bib-route source)
-  (define (headline source)
+; 
+; (define (bib-route source)
+;   (define (headline source)
+;     (let ((\ file-name-separator-string))
+;       (string-append (bitspath) \ "%.bib: " source \ "%.bib")))
+; 
+;   (with-output-to-string
+;     (lambda ()
+;       (format #t "~a~%~/~a~%~/~a~%~/~a~%"
+;               (headline source)
+;               "@ $(guile (echo-bib/cnv \"$@\"))"
+;               "@ $(guile (ensure-path! \"$(@D)\"))"
+;               "@ iconv -t $(texcode) < '$<' > '$@'"))))
+ 
+(define (tex-route source ext)
+  (define headline
     (let ((\ file-name-separator-string))
-      (string-append (bitspath) \ "%.bib: " source \ "%.bib")))
+      (string-append (bitspath) \ "%." ext ": "  source \ "%." ext)))
 
   (with-output-to-string
     (lambda ()
       (format #t "~a~%~/~a~%~/~a~%~/~a~%"
-              (headline source)
-              "@ $(guile (echo-bib/cnv \"$@\"))"
-              "@ $(guile (ensure-path! \"$(@D)\"))"
-              "@ iconv -t $(texcode) < '$<' > '$@'"))))
-
-(define (sty-route source)
-  (define (headline source)
-    (let ((\ file-name-separator-string))
-      (string-append (bitspath) \ "%.sty: " source \ "%.sty")))
-
-  (with-output-to-string
-    (lambda ()
-      (format #t "~a~%~/~a~%~/~a~%~/~a~%"
-              (headline source)
+              headline
               "@ $(guile (echo-sty/cnv \"$@\"))"
               "@ $(guile (ensure-path! \"$(@D)\"))"
               "@ iconv -t $(texcode) < '$<' > '$@'"))))
