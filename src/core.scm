@@ -293,27 +293,23 @@
                   (close-port c)
                   r)))))
 
-; Генерация правил для управления разнообразным копированием файлов с изменением
-; структуры путей: процедуры x-route. Нужно, например, для выдёргивания h-файлов
-; в целевую директорию include. Процедура просто вычисляет нужную строку.
-; Результат нужно обрабатывать при помощи $(eval ...) по месту вызова процедуры.
-; FIXME: Проще не получается
+; Правила makenv устроены так, что обычно структура деревьев исходных файлов
+; повторяется целевыми. Иногда требуется иное поведение: копирование
+; заголовочных файлов для библиотек в специальную include-директорию, или
+; копирование стилей и списка библиотек в место компиляции tex-файлов. Шаблоны
+; таких правил генерируют x-route процедуры. Я старался минимизировать число
+; необходимых параметров. Результаты этих процедур необходимо пропускать через
+; $(eval ...) по месту вызова.
 
-
-
-(define enpath-string )
-(define echo-string (lambda (job) (format #f "@ $(guile (echo-~a \"$@\"))" job)))
-(define iconv-string "@ itconv -t $(texcode) < '$<' > '$@'")
-
-(define (h-route target source)
-  (define (headline target source)
-    (let ((/ file-name-separator-string))
-      (string-append I / target / "%.h: " source / "%.h"))) 
+(define (h-route target)
+  (define (headline target)
+    (let ((\ file-name-separator-string))
+      (string-append I \ target \ "%.h: " (nodepath) \ "%.h"))) 
 
   (with-output-to-string
     (lambda ()
       (format #t "~a~%~/~a~%~/~a~%~/~a~%"
-              (headline target source)
+              (headline target)
               "@ $(guile (echo-h \"$@\"))"
               "@ $(guile (ensure-path! \"$(@D)\"))"
               "@ install -m 755 '$<' '$@'"))))
@@ -324,25 +320,28 @@
 ;               "@ $(guile (ensure-path! \"$(@D)\"))"
 ;               "@ install -m 755 '$<' '$@'")
 
-(define (bib-route target source)
-  (with-output-to-string
-    (lambda ()
-      (format #t "~a~%~/~a~%~/~a~%~/~a~%"
-              (headline "$(B)" target source "bib")
-              (echo-string "bib/cnv")
-              enpath-string
-              iconv-string))))
-
-(define (sty-route target source)
-  (define (headline target source)
+(define (bib-route source)
+  (define (headline source)
     (let ((\ file-name-separator-string))
-      (string-append I \ target \ "%.h: " source \ "%.h")))
+      (string-append (bitspath) \ "%.bib: " source \ "%.bib")))
 
   (with-output-to-string
     (lambda ()
       (format #t "~a~%~/~a~%~/~a~%~/~a~%"
-              (headline "$(B)" target source "sty")
-              (echo-string "sty/cnv")
-              enpath-string
-              iconv-string))))
+              (headline source)
+              "@ $(guile (echo-bib/cnv \"$@\"))"
+              "@ $(guile (ensure-path! \"$(@D)\"))"
+              "@ iconv -t $(texcode) < '$<' > '$@'"))))
 
+(define (sty-route source)
+  (define (headline source)
+    (let ((\ file-name-separator-string))
+      (string-append (bitspath) \ "%.sty: " source \ "%.sty")))
+
+  (with-output-to-string
+    (lambda ()
+      (format #t "~a~%~/~a~%~/~a~%~/~a~%"
+              (headline source)
+              "@ $(guile (echo-sty/cnv \"$@\"))"
+              "@ $(guile (ensure-path! \"$(@D)\"))"
+              "@ iconv -t $(texcode) < '$<' > '$@'"))))
