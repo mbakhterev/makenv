@@ -35,6 +35,7 @@
 (define I "")
 (define T "")
 (define L "")
+(define D "")
 
 ; Процедура запоминает целевую директорию для сборки, предварительно проверяя её
 ; доступность. Если проверка не пройдена, то bdir-set! вызывает ошибку в make.
@@ -54,7 +55,9 @@
                             (set! B (string-append bdir / "bin"))
                             (set! L (string-append bdir / "lib"))
                             (set! I (string-append bdir / "include"))
-                            (set! T (string-append bdir / "tst"))))
+                            (set! T (string-append bdir / "tst"))
+                            (set! D (string-append bdir / "txt"))
+                            ))
                    (throw 'internal "is not accessible (700) directory"))))
     handler))
 
@@ -186,7 +189,8 @@
 (make-echoes "install"
              "dep" "dep/gen" "dep-c++" "c" "c/gen" "c++" "h" "h/gen"
              "link" "lib"
-             "tex" "xtex" "tex/cnv" "xtex/cp" "sty/cnv")
+             "tex" "xtex" "tex/cnv" "xtex/cp" "sty/cnv"
+             "cp")
 
 ; Процедура для проверки определённости всех переменных, перечисленных по именам
 ; через пробел. 

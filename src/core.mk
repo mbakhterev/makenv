@@ -19,7 +19,7 @@ bdir = $(shell readlink -f '$(BDIR)')
 $(guile (bdir-set! "$(bdir)"))
 endif
 
-bits = $(bdir)/B
+bits := $(bdir)/bits
 
 # rootpath = $(patsubst %/,%,$(dir $(firstword $(MAKEFILE_LIST))))
 # nodepath = $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
@@ -45,6 +45,7 @@ B := $(guile B)
 T := $(guile T)
 L := $(guile L)
 I := $(guile I)
+D := $(guile D)
 
 # suborig = $(subst file,,$(origin $(1)))
 # checkdefs = $(if $(strip $(foreach v,$(1),$(call suborig,$(v)))),$(error $(2)))
@@ -239,9 +240,14 @@ $(B)/%.bib: %.bib
 
 $(bits)/%.pdf: $(bits)/%.tex
 	@ $(guile (echo-tex "$@"))
-	@ (cd $(@D) && $(tex) $(<F) >/dev/null)
+	@ (cd $(@D) && $(tex) $(<F) > $(<F).out) || { iconv -f $(texcode) $(@D)/$(<F).out; exit -1; }
 
 #		| iconv -f $(texcode) \
 #		| sed -ne 's:^$(bdir):\.:g; p'
+
+$(D)/%.pdf:
+	@ $(guile (echo-cp "$@"))
+	@ $(guile (ensure-path! "$(@D)"))
+	@ cp $< $@
 
 endif # группа правил {Xe}LaTeX
