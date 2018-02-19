@@ -209,12 +209,12 @@ endif # группа правил flex/yacc
 
 ifdef tex 
 
-vars = bib tex xtex texcode 
+vars = bib tex xtex texcode
 $(guile (check-vars "{Xe}LaTeX group" "$(vars)"))
 
 # $(call checkdefs,$(vars),LaTeX group needs: $(vars))
 
-$(B)/%.tex: %.tex
+$(bits)/%.tex: %.tex
 	@ $(guile (echo-tex/cnv "$@"))
 	@ $(guile (ensure-path! "$(@D)"))
 	@ iconv -t $(texcode) < $< > $@
@@ -237,10 +237,11 @@ $(B)/%.bib: %.bib
 # Такое хитрое правило необходимо, чтобы можно было читать сообщения об ошибках
 # в другой локали
 
-$(bdir)/%.pdf: $(bdir)/%.tex
+$(bits)/%.pdf: $(bits)/%.tex
 	@ $(guile (echo-tex "$@"))
-	@ (cd $(@D) && ($(tex) $< && $(tex) $<)) \
-		| iconv -f $(texcode) \
-		| sed -ne 's:^$(bdir):\.:g; p'
+	@ (cd $(@D) && $(tex) $(<F) >/dev/null)
+
+#		| iconv -f $(texcode) \
+#		| sed -ne 's:^$(bdir):\.:g; p'
 
 endif # группа правил {Xe}LaTeX
