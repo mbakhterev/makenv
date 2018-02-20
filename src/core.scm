@@ -190,7 +190,7 @@
              "dep" "dep/gen" "dep-c++" "c" "c/gen" "c++" "h" "h/gen"
              "link" "lib"
              "tex" "xtex" "tex/cnv" "xtex/cp" "sty/cnv"
-             "cp")
+             "cp" "pix")
 
 ; Процедура для проверки определённости всех переменных, перечисленных по именам
 ; через пробел. 
@@ -228,6 +228,7 @@
 ; Специальные варианты reform. Для уменьшения потока данных между guile и make.
 (define (f2o prefix paths) (reform paths prefix "o"))
 (define (f2d paths) (reform paths "" "d"))
+(define (f2p prefix paths) (reform paths prefix ""))
 
 ; Функция должна прочитать результат cmd (которая должна быть командой запуска
 ; компилятора с опциями для генерации зависимостей исходного .c или .cpp файла),
@@ -349,3 +350,18 @@
               "@ $(guile (echo-sty/cnv \"$@\"))"
               "@ $(guile (ensure-path! \"$(@D)\"))"
               "@ iconv -t $(texcode) < '$<' > '$@'"))))
+
+(define (pix-route source ext)
+  (define headline
+    (let ((\ file-name-separator-string))
+      (string-append (bitspath) \ "%." ext ": "  source \ "%." ext)))
+
+  (with-output-to-string
+    (lambda ()
+      (format #t "~a~%~/~a~%~/~a~%~/~a~%"
+              headline
+              "@ $(guile (echo-pix \"$@\"))"
+              "@ $(guile (ensure-path! \"$(@D)\"))"
+              "@ cp '$<' '$@'"))))
+
+(define (tex-log path) (string-append (drop-ext path) ".log"))

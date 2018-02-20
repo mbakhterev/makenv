@@ -240,10 +240,8 @@ $(B)/%.bib: %.bib
 
 $(bits)/%.pdf: $(bits)/%.tex
 	@ $(guile (echo-tex "$@"))
-	@ (cd $(@D) && $(tex) $(<F) > $(<F).out) || { iconv -f $(texcode) $(@D)/$(<F).out; exit -1; }
-
-#		| iconv -f $(texcode) \
-#		| sed -ne 's:^$(bdir):\.:g; p'
+	@ (cd $(@D) && $(tex) $(<F) >/dev/null) \
+		|| { iconv -f $(texcode) $(guile (tex-log "$@")); exit -1; }
 
 $(D)/%.pdf:
 	@ $(guile (echo-cp "$@"))
