@@ -56,8 +56,7 @@
                             (set! L (string-append bdir / "lib"))
                             (set! I (string-append bdir / "include"))
                             (set! T (string-append bdir / "tst"))
-                            (set! D (string-append bdir / "txt"))
-                            ))
+                            (set! D (string-append bdir / "txt"))))
                    (throw 'internal "is not accessible (700) directory"))))
     handler))
 
@@ -365,3 +364,14 @@
               "@ cp '$<' '$@'"))))
 
 (define (tex-log path) (string-append (drop-ext path) ".log"))
+
+(define (tcn-path name)
+  (let* ((\ file-name-separator-string)
+         (file-name (string-append name ".mk"))
+         (tcn-root (string-append root \ file-name))
+         (tcn-base (string-append base \ ".." \ "tcn" \ file-name)))
+    (if (access? tcn-root R_OK)
+      tcn-root
+      (if (access? tcn-base R_OK)
+        tcn-base
+        (gmk-error "no toolchain: ~a" name)))))

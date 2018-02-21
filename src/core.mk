@@ -31,7 +31,7 @@ ifndef TCN
 TCN = toolchain
 endif
 
-include $(guile root)/$(TCN).mk
+include $(guile (tcn-path "$(TCN)"))
 
 # B := $(bdir)/bin
 # T := $(bdir)/tst
