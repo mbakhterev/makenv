@@ -188,7 +188,7 @@
 (make-echoes "install"
              "dep" "dep/gen" "dep-c++" "c" "c/gen" "c++" "h" "h/gen"
              "link" "lib"
-             "tex" "xtex" "tex/cnv" "xtex/cp" "sty/cnv"
+             "tex" "xtex" "tex/cnv" "xtex/cp" "biber"
              "cp" "pix")
 
 ; Процедура для проверки определённости всех переменных, перечисленных по именам
@@ -346,7 +346,7 @@
     (lambda ()
       (format #t "~a~%~/~a~%~/~a~%~/~a~%"
               headline
-              "@ $(guile (echo-sty/cnv \"$@\"))"
+              "@ $(guile (echo-tex/cnv \"$@\"))"
               "@ $(guile (ensure-path! \"$(@D)\"))"
               "@ iconv -t $(texcode) < '$<' > '$@'"))))
 
@@ -365,6 +365,10 @@
 
 (define (tex-log path) (string-append (drop-ext path) ".log"))
 
+; Процедура подбирает подходящий toolchain-файл по имени. Поиск сначала в
+; исходной директории для исходного makefile-а, а затем в базовой директории для
+; makenv
+
 (define (tcn-path name)
   (let* ((\ file-name-separator-string)
          (file-name (string-append name ".mk"))
@@ -375,3 +379,14 @@
       (if (access? tcn-base R_OK)
         tcn-base
         (gmk-error "no toolchain: ~a" name)))))
+
+; Процедура проверяет, нужно ли запускать biber для вёрстки списка литературы.
+; Проверка осуществляется по наличию файла с расширением bcf. Если файл найден,
+; то выдаётся нужная для его обработки команда. Если не найден, то "true", что
+; заставит интерпретатор, используемый make, корректно ничего не сделать.
+
+(define (biberize path)
+  (let ((bcf (string-append (drop-ext path) ".bcf")))
+    (if (access? bcf R_OK)
+      (gmk-expand (string-append "$(biber) " (basename bcf)))
+      "true")))

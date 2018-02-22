@@ -210,7 +210,7 @@ endif # группа правил flex/yacc
 
 ifdef tex 
 
-vars = bib tex xtex texcode
+vars = bib biber tex xtex texcode
 $(guile (check-vars "{Xe}LaTeX group" "$(vars)"))
 
 # $(call checkdefs,$(vars),LaTeX group needs: $(vars))
@@ -238,10 +238,10 @@ $(B)/%.bib: %.bib
 # Такое хитрое правило необходимо, чтобы можно было читать сообщения об ошибках
 # в другой локали
 
-$(bits)/%.pdf: $(bits)/%.tex
+$(bits)/%.pdf $(bits)/%.bcf: $(bits)/%.tex
 	@ $(guile (echo-tex "$@"))
-	@ (cd $(@D) && $(tex) $(<F) >/dev/null) \
-		|| { iconv -f $(texcode) $(guile (tex-log "$@")); exit -1; }
+	(cd $(@D) && $(guile (biberize "$@")) && $(tex) $(<F)) >/dev/null \
+		|| { iconv -cf $(texcode) $(guile (tex-log "$@")); exit -1; }
 
 $(D)/%.pdf:
 	@ $(guile (echo-cp "$@"))
