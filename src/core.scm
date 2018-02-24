@@ -385,8 +385,33 @@
 ; то выдаётся нужная для его обработки команда. Если не найден, то "true", что
 ; заставит интерпретатор, используемый make, корректно ничего не сделать.
 
-(define (biberize path)
-  (let ((bcf (string-append (drop-ext path) ".bcf")))
-    (if (access? bcf R_OK)
-      (gmk-expand (string-append "$(biber) " (basename bcf)))
-      "true")))
+(define (biberize! path)
+  (define (handler key . args)
+    (format (current-error-port) "~s" (error-string 'biberize! path key args))
+    "false")
+
+  (let* ((bcf (string-append (drop-ext path) ".bcf"))
+         (bcf-sum (string-append bcf ".sum")))
+    ; Если списка литературы нет, то пропускаем biber, формируя вместо команды
+    ; с biber-ом команду true. Если список есть, нужно проверить, новый ли он.
+    ; Для этого используется shasum. Если он не изменился, по shasum-критерию,
+    ; то тоже пропускаем biber. Надеюсь в этом коде, на то, что with-конструкции
+    ; закрывают порты при ошибках
+    (if (not (access? bcf R_OK))
+     "true"
+      (catch
+        'system-error
+        (lambda ()
+          (let ((known-sum (if (not (access? bcf-sum R_OK))
+                             ""
+                             (with-input-from-file bcf-sum read-line)))
+                (new-sum (with-input-from-port
+                           (open-input-pipe (string-append "shasum " bcf))
+                           read-line)))
+;            (format (current-error-port) "known: ~a~%new: ~a~%bcf-sum: ~a~%" known-sum new-sum bcf-sum)
+            (if (equal? known-sum new-sum)
+              "true"
+              (begin
+                (with-output-to-file bcf-sum (lambda () (display new-sum)))
+                (string-append (gmk-expand "$(biber)") " " (basename bcf))))))
+        handler))))
