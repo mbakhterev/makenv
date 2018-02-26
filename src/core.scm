@@ -381,14 +381,23 @@
         (gmk-error "no toolchain: ~a" name)))))
 
 ; Процедура проверяет, нужно ли запускать biber для вёрстки списка литературы.
-; Проверка осуществляется по наличию файла с расширением bcf. Если файл найден,
-; то выдаётся нужная для его обработки команда. Если не найден, то "true", что
-; заставит интерпретатор, используемый make, корректно ничего не сделать.
+; Проверка осуществляет по изменениям в: (1) bcf-файле, который создаёт компиляция
+; исходного tex-файла; (2) bib-файлах из списка предпосылок -- аргументе
+; biberize! Исходный tex-файл -- это первый элемент в этом списке. Изменением
+; считается изменение контрольной sha-суммы
 
-(define (biberize! path)
+(define (biberize! prerequisites)
+  (define files (string-split prerequisites #\ ))
+  (define path (car files))
+  (define bibs (filter (lambda (f) (equal? "bib" (substring/read-only f (max 0 (- (string-length f) 3)))))
+                       (cdr files)))
+
   (define (handler key . args)
     (format (current-error-port) "~s" (error-string 'biberize! path key args))
     "false")
+
+  (define (shasum-cmd bcf bibs)
+    (apply string-append "shasum" (map (lambda (f) (format #f " '~a'" f)) (cons bcf bibs))))
 
   (let* ((bcf (string-append (drop-ext path) ".bcf"))
          (bcf-sum (string-append bcf ".sum")))
@@ -402,16 +411,22 @@
       (catch
         'system-error
         (lambda ()
-          (let ((known-sum (if (not (access? bcf-sum R_OK))
-                             ""
-                             (with-input-from-file bcf-sum read-line)))
-                (new-sum (with-input-from-port
-                           (open-input-pipe (string-append "shasum " bcf))
-                           read-line)))
-;            (format (current-error-port) "known: ~a~%new: ~a~%bcf-sum: ~a~%" known-sum new-sum bcf-sum)
-            (if (equal? known-sum new-sum)
+          (let ((known-sums (if (not (access? bcf-sum R_OK))
+                              ""
+                              (with-input-from-file bcf-sum read)))
+                (new-sums (with-input-from-port
+                            (open-input-pipe (shasum-cmd bcf bibs))
+                            (lambda ()
+                              ; (display (shasum-cmd bcf bibs))
+                              ; (newline)
+                              (let lp ((l (read-line)))
+                                (if (eof-object? l)
+                                  '()
+                                  (cons l (lp (read-line)))))))))
+            (format (current-error-port) "known: ~s~%new: ~s~%bcf-sum: ~s~%" known-sums new-sums bcf-sum)
+            (if (equal? known-sums new-sums)
               "true"
               (begin
-                (with-output-to-file bcf-sum (lambda () (display new-sum)))
+                (with-output-to-file bcf-sum (lambda () (write new-sums)))
                 (string-append (gmk-expand "$(biber)") " " (basename bcf))))))
         handler))))
