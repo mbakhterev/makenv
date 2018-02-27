@@ -423,7 +423,7 @@
                                 (if (eof-object? l)
                                   '()
                                   (cons l (lp (read-line)))))))))
-            (format (current-error-port) "known: ~s~%new: ~s~%bcf-sum: ~s~%" known-sums new-sums bcf-sum)
+;            (format (current-error-port) "known: ~s~%new: ~s~%bcf-sum: ~s~%" known-sums new-sums bcf-sum)
             (if (equal? known-sums new-sums)
               "true"
               (begin

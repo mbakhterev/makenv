@@ -243,7 +243,7 @@ $(B)/%.bib: %.bib
 
 $(bits)/%.pdf: $(bits)/%.tex
 	@ $(guile (echo-tex "$@"))
-	(cd $(@D) && $(guile (biberize! "$^")) && $(tex) $(<F)) >/dev/null \
+	@ (cd $(@D) && $(guile (biberize! "$^")) && $(tex) $(<F)) >/dev/null \
 		|| { iconv -cf $(texcode) $(guile (tex-log "$@")); exit -1; }
 
 $(D)/%.pdf:
