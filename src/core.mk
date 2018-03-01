@@ -126,10 +126,12 @@ $(bits)/%.d: $(bits)/%.c
 
 $(bits)/%.o: %.c
 	@ $(guile (echo-c "$@"))
+	@ $(guile (ensure-path! "$(@D)"))
 	@ $(cc) -c $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
 
 $(bits)/%.o: %.cpp
 	@ $(guile (echo-c++ "$@"))
+	@ $(guile (ensure-path! "$(@D)"))
 	@ $(cc) -c $(cflags) $(copt) -x c++ -std=$(cppstd) -o $@ $<
 
 $(bits)/%.o: $(bits)/%.c
