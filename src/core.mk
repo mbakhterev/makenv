@@ -126,10 +126,12 @@ $(bits)/%.d: $(bits)/%.c
 
 $(bits)/%.o: %.c
 	@ $(guile (echo-c "$@"))
+	@ $(guile (ensure-path! "$(@D)"))
 	@ $(cc) -c $(cflags) $(copt) -x c -std=$(cstd) -o $@ $<
 
 $(bits)/%.o: %.cpp
 	@ $(guile (echo-c++ "$@"))
+	@ $(guile (ensure-path! "$(@D)"))
 	@ $(cc) -c $(cflags) $(copt) -x c++ -std=$(cppstd) -o $@ $<
 
 $(bits)/%.o: $(bits)/%.c
@@ -235,12 +237,15 @@ $(B)/%.bib: %.bib
 	@ $(guile (ensure-path! "$(@D)"))
 	@ iconv -t $(texcode) < $< > $@
 
-# Такое хитрое правило необходимо, чтобы можно было читать сообщения об ошибках
-# в другой локали
+# Такая структура правила необходима, чтобы выводить сообщения об ошибках в
+# другой локали. Запуск biber -- дорогая операция, поэтому запускается по
+# необходимости: изменились ссылки в tex-файле или изменилась одна из
+# bib-предпосылок. Такой анализ проводит процедура biberize!, для чего ей и
+# нужен список всех предпосылок.
 
-$(bits)/%.pdf $(bits)/%.bcf: $(bits)/%.tex
+$(bits)/%.pdf: $(bits)/%.tex
 	@ $(guile (echo-tex "$@"))
-	@ (cd $(@D) && $(guile (biberize! "$@")) && $(tex) $(<F)) >/dev/null \
+	@ (cd $(@D) && $(guile (biberize! "$^")) && $(tex) $(<F)) >/dev/null \
 		|| { iconv -cf $(texcode) $(guile (tex-log "$@")); exit -1; }
 
 $(D)/%.pdf:
