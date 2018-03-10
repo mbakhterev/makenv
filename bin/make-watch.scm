@@ -1,5 +1,4 @@
-(use-modules (ice-9 popen))
-(use-modules (ice-9 rdelim))
+(use-modules (ice-9 popen) (ice-9 rdelim) (ice-9 futures))
 
 (define (collect-options arguments)
   (lambda () 
@@ -30,26 +29,23 @@
     (not (and-map (lambda (x) (not (string-suffix? x str))) sfxs)))
 
   (define (make-thread thrd str)
-    (if (or (not (trigger? str)) (thread? thrd)) 
-      thrd
-      (if (`) )
-        
-            
-      thrd
-      ()
-      )
-    )
+    ; Запускать make снова нужно в случае, если строчка зацепила один из
+    ; отслеживаемых суффиксов, и либо рабочий поток не создан, либо создан и
+    ; закончился. Видимо, thread-join! вызывать не нужно. Потоки и так
+    ; собираются
+    (format (current-error-port) "~a: ~a~%" str (if (trigger? str) "triggered" "skipping"))
+    (cond ((not (trigger? str)) thrd)
+
+          ((or (not (thread? thrd)) (thread-exited? thrd))
+           (call-with-new-thread (lambda () (system "make -r BDIR=/tmp/sci TCN=tex"))))
+          
+          (else thrd)))
 
   (let ((p (open-input-pipe inotify-command)))
     (let loop ((info (read-line p))
                (thrd #f))
       (if (not (eof-object? info))
-        (begin
-          (if (trigger? info)
-            (if (or (not (thread? thrd)) ())
-              
-              ))
-          (loop (read-line p) thrd))))
+        (loop (read-line p) (make-thread thrd info))))
     (close-pipe p)))
 
 (let* ((args (command-line))
