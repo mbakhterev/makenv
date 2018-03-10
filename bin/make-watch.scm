@@ -29,17 +29,31 @@
   (define (trigger? str)
     (not (and-map (lambda (x) (not (string-suffix? x str))) sfxs)))
 
+  (define (make-thread thrd str)
+    (if (or (not (trigger? str)) (thread? thrd)) 
+      thrd
+      (if (`) )
+        
+            
+      thrd
+      ()
+      )
+    )
+
   (let ((p (open-input-pipe inotify-command)))
     (let loop ((info (read-line p))
                (thrd #f))
       (if (not (eof-object? info))
         (begin
-          (if (trigger? info) (begin (display info) (newline)) )
+          (if (trigger? info)
+            (if (or (not (thread? thrd)) ())
+              
+              ))
           (loop (read-line p) thrd))))
     (close-pipe p)))
 
-(display (let* ((args (command-line))
+(let* ((args (command-line))
        (prog (car args)))
   (catch 'parse-options
          (lambda () (call-with-values (collect-options (cdr args)) watch-loop))
-         (lambda (key . args) (format (current-error-port) "~a: ~a~%" prog (car args))))))
+         (lambda (key . args) (format (current-error-port) "~a: ~a~%" prog (car args)))))
