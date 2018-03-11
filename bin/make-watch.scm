@@ -1,32 +1,78 @@
 (use-modules (ice-9 popen)
              (ice-9 rdelim)
-             (ice-9 futures)
-             (ice-9 atomic))
+             (ice-9 atomic)
+             (ice-9 threads)
+             (srfi srfi-9 gnu))
+
+(define-immutable-record-type Options
+  (options suffixes directories target toolchain debug?)
+  options?
+  (suffixes options:suffixes)
+  (directories options:directories)
+  (target options:target)
+  (toolchain options:toolchain)
+  (debug? options:debug?))
+
 
 (define (collect-options arguments)
   (lambda () 
     (let lp ((mode #:none)
              (arguments arguments)
-             (suffixes '())
-             (directories '()))
+             (opts (options '() '() "" "" #f)))
       (if (null? arguments)
-        (values suffixes directories)
+        (if (not (or (null? (options:suffixes opts))
+                     (null? (options:directories opts))
+                     (string-null? (options:target opts))))
+          opts
+          (throw 'parse-options (format #f "not enough options to run: ~a" opts)))
         (let ((a (car arguments)))
           (if (eq? #\- (string-ref a 0))
             (cond
-              ((string= "-s" a) (lp #:sfx (cdr arguments) suffixes directories))
-              ((string= "-d" a) (lp #:dir (cdr arguments) suffixes directories))
+              ((string= "-s" a) (lp #:sfx (cdr arguments) opts))
+              ((string= "-d" a) (lp #:dir (cdr arguments) opts))
+              ((string= "-D" a) (lp #:none (cdr arguments) (set-field opts (options:debug?) #t)))
+
+              ((string= "-B" a) (if (string-null? (options:target opts))
+                                  (lp #:tgt (cdr arguments) opts)
+                                  (throw 'parse-options
+                                         (format #f "build dir is already specified: ~a"
+                                                 (options:target opts)))))
+
+              ((string= "-T" a) (if (string-null? (options:toolchain opts))
+                                  (lp #:tcn (cdr arguments) opts)
+                                  (throw 'parse-options
+                                         (format #f "toolchain is already specified: ~a"
+                                                 (options:toolchain opts)))))
+
               (else (throw 'parse-options (format #f "unknown option: ~a" a))))
             (case mode
-              ((#:sfx) (lp mode (cdr arguments) (cons a suffixes) directories))
-              ((#:dir) (lp mode (cdr arguments) suffixes (cons a directories)))
+              ((#:sfx) (lp mode
+                           (cdr arguments)
+                           (set-field opts (options:suffixes) (cons a (options:suffixes opts)))))
+               
+              ((#:dir) (lp mode
+                           (cdr arguments)
+                           (set-field opts (options:directories) (cons a (options:directories opts)))))
+
+              ((#:tcn) (lp #:none (cdr arguments) (set-field opts (options:toolchain) a)))
+              ((#:tgt) (lp #:none (cdr arguments) (set-field opts (options:target) a)))
+
               (else (throw 'parse-options (format #f "no classifier for: ~a" a))))))))))
 
-(define (watch-loop sfxs dirs)
+(define (watch-loop opts)
+  (define sfxs (options:suffixes opts))
+  (define dirs (options:directories opts))
+
   (define (wrap s) (format #f " '~a'" s)) 
 
   (define inotify-command
     (apply string-append "inotifywait -rm -e close_write --format '%:e %f'" (map wrap dirs)))
+
+  (define make-command
+    (string-append
+      (let ((v (options:toolchain opts))) (if (null? v) "" (format #f "TCN='~a' " v)))
+      (let ((v (options:target opts))) (if (null? v) "" (format #f "BDIR='~a' " v)))
+      "make -r"))
   
   (define (trigger? str)
     (not (and-map (lambda (x) (not (string-suffix? x str))) sfxs)))
@@ -48,7 +94,8 @@
     ; поэтому можно без cas-операции сбросить его в #:accepted и выполнить одну
     ; итерацию сборки
     (atomic-box-set! synchro #:accepted)
-    (system "make -r BDIR=/tmp/sci TCN=tex")
+    ; (system "make -r BDIR=/tmp/sci TCN=tex")
+    (system make-command)
 
     ; Далее нужно действовать осторожнее. accepted может быть переведён снова в
     ; need-to-remake, поэтому меняем через cas
