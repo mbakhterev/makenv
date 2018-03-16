@@ -6,7 +6,7 @@ cdebug = -g3 -flto
 
 cstd = c11
 cppstd = c++14
-dep = $(cc)
+dep = $(cc) -M
 
 lnk = arm-none-eabi-gcc -march=armv7-m -mtune=cortex-m3
 lflags = -pipe

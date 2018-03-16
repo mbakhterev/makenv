@@ -318,6 +318,19 @@
               "@ $(guile (ensure-path! \"$(@D)\"))"
               "@ install -m 755 '$<' '$@'"))))
 
+(define (h-route-subdir target subdir)
+  (define headline
+    (let ((\ file-name-separator-string))
+      (string-append I \ target \ "%.h: " (nodepath) \ subdir \ "%.h")))
+
+  (with-output-to-string
+    (lambda ()
+      (format #t "~a~%~/~a~%~/~a~%~/~a~%"
+              headline
+              "@ $(guile (echo-h \"$@\"))"
+              "@ $(guile (ensure-path! \"$(@D)\"))"
+              "@ install -m 755 '$<' '$@'"))))
+
 ; (format #t "~a~%~/~a~%~/~a~%~/~a~%"
 ;               (headline target source)
 ;               "@ $(guile (echo-h \"$@\"))"
@@ -430,3 +443,11 @@
                 (with-output-to-file bcf-sum (lambda () (write new-sums)))
                 (string-append (gmk-expand "$(biber)") " " (basename bcf))))))
         handler))))
+
+(define (undefine-vars prefix vars)
+  (with-output-to-string
+    (lambda ()
+      (for-each (if (string-null? prefix)
+                  (lambda (v) (format #t "undefine ~a~%" v))
+                  (lambda (v) (format #t "undefine ~a-~a~%" prefix v)))
+                (string-split vars char-whitespace?)))))
