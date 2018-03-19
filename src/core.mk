@@ -33,11 +33,6 @@ endif
 
 include $(guile (tcn-path "$(TCN)"))
 
-# B := $(bdir)/bin
-# T := $(bdir)/tst
-# L := $(bdir)/lib
-# I := $(bdir)/include
-
 # FIXME: это хак, чтобы согласовать переменные в guile и make. Автоматически это
 # согласование плохо работает, при возврате строк из guile для обработки в make.
 
@@ -46,9 +41,6 @@ T := $(guile T)
 L := $(guile L)
 I := $(guile I)
 D := $(guile D)
-
-# suborig = $(subst file,,$(origin $(1)))
-# checkdefs = $(if $(strip $(foreach v,$(1),$(call suborig,$(v)))),$(error $(2)))
 
 # О специальных переменных в make:
 #
@@ -119,18 +111,6 @@ $(bits)/%.h: %.h
 	@ $(guile (ensure-path! "$(@D)"))
 	@ install -m 755 $< $@
 
-# $(I)/%.h:
-# 	@ $(guile (echo-h "$@"))
-# 	@ $(guile (ensure-path! "$(@D)"))
-# 	@ install -m 755 '$^' '$@'
-
-# define headroute-m
-# $(I)/$1/%.h: $2/%.h
-# 	@ $(echo) '\theader\t$$@' \
-# 	&& $(call mkpath,$(bdir),$$(@D)) \
-# 	&& install -m 755 $$< $$@
-# endef
-
 endif # группа правил компиляции C/C++
 
 # Группа правил для сборки объектных файлов. FIXME: почему отдельно от C/C++?
@@ -139,8 +119,6 @@ ifdef lnk
 
 vars = lnk lflags ldebug loptimization ar
 $(guile (check-vars "link group" "$(vars)"))
-
-# $(call checkdefs,$(vars),LiNK group needs: $(vars))
 
 ifeq ($(DBG), Y)
 lflags += $(ldebug)
@@ -164,6 +142,50 @@ $(L)/%.a:
 	@ $(ar) cr $@ $^
 
 endif # группа правил сборки объектных файлов
+
+# Группа правил для низкоуровневых сборок
+
+ifdef objcopy
+
+$(guile (check-vars "low level builds" "objcopy as"))
+
+$(B)/%.elf:
+	@ $(guile (echo-elf "$@"))
+	@ $(guile (ensure-path! "$(@D)"))
+	@ $(lnk) $^ -o $@ -Wl,-Map=$@.map $(lflags)
+
+$(B)/%.bin: $(B)/%.elf
+	@ $(guile (echo-bin "$@"))
+	@ $(objcopy) -O binary $< $@
+
+$(B)/%.hex: $(B)/%.elf
+	@ $(guile (echo-hex "$@"))
+	@ $(objcopy) -O ihex $< $@
+
+$(T)/%.elf:
+	@ $(guile (echo-elf "$@"))
+	@ $(guile (ensure-path! "$(@D)"))
+	@ $(lnk) $^ -o $@ -Wl,-Map=$@.map $(lflags)
+
+$(T)/%.bin: $(T)/%.elf
+	@ $(guile (echo-bin "$@"))
+	@ $(objcopy) -O binary $< $@
+
+$(T)/%.hex: $(T)/%.elf
+	@ $(guile (echo-hex "$@"))
+	@ $(objcopy) -O ihex $< $@
+
+$(L)/%.o:
+	@ $(guile (echo-o "$@"))
+	@ $(guile (ensure-path! "$(@D)"))
+	@ install -m 755 $< $@
+
+$(bits)/%.o: %.s
+	@ $(guile (echo-asm "$@"))
+	@ $(guile (ensure-path! "$(@D)"))
+	@ $(as) -o $@ $<
+
+endif # группа правил для низкоуровневых сборок
 
 # Группа правил для flex/yacc. FIXME: пока не трогаю
 

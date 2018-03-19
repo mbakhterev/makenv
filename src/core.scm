@@ -189,7 +189,8 @@
              "dep" "dep/gen" "dep-c++" "c" "c/gen" "c++" "h" "h/gen"
              "link" "lib"
              "tex" "xtex" "tex/cnv" "xtex/cp" "biber"
-             "cp" "pix")
+             "cp" "pix"
+             "asm" "elf" "bin" "hex" "o")
 
 ; Процедура для проверки определённости всех переменных, перечисленных по именам
 ; через пробел. 
@@ -333,25 +334,6 @@
               "@ $(guile (ensure-path! \"$(@D)\"))"
               "@ install -m 755 '$<' '$@'"))))
 
-; (format #t "~a~%~/~a~%~/~a~%~/~a~%"
-;               (headline target source)
-;               "@ $(guile (echo-h \"$@\"))"
-;               "@ $(guile (ensure-path! \"$(@D)\"))"
-;               "@ install -m 755 '$<' '$@'")
-; 
-; (define (bib-route source)
-;   (define (headline source)
-;     (let ((\ file-name-separator-string))
-;       (string-append (bitspath) \ "%.bib: " source \ "%.bib")))
-; 
-;   (with-output-to-string
-;     (lambda ()
-;       (format #t "~a~%~/~a~%~/~a~%~/~a~%"
-;               (headline source)
-;               "@ $(guile (echo-bib/cnv \"$@\"))"
-;               "@ $(guile (ensure-path! \"$(@D)\"))"
-;               "@ iconv -t $(texcode) < '$<' > '$@'"))))
- 
 (define (tex-route source ext)
   (define headline
     (let ((\ file-name-separator-string))
