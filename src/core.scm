@@ -283,6 +283,7 @@
                            (lambda ()
                              (let lp ((st #:start)
                                       (l (read-line c)))
+                               ; (format (current-error-port) "~a~%" l)
                                (if (eof-object? l)
                                  "true"
                                   (match (fix-string st l)
@@ -290,6 +291,7 @@
                                      (if (eqv? state #:no-target)
                                        "false"
                                        (begin
+                                         ; (format (current-error-port) "~a~%" str)
                                          (format t "~a~%" str)
                                          (lp state (read-line c)))))))))
                            (handler (string-append "| " cmd) "false"))))

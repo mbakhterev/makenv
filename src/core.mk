@@ -81,30 +81,6 @@ else
 copt = $(coptimization)
 endif
 
-# o2d = $(patsubst %.o,%.d,$(1))
-# c2o = $(addprefix $(1)/,$(patsubst %.c,%.o,$(2)))
-# cpp2o = $(addprefix $(1)/,$(patsubst %.cpp,%.o,$(2)))
-
-# $(bits)/%.d: %.c
-# 	@ $(guile (echo-dep "$@"))
-# 	@ $(guile (ensure-path! "$(@D)"))
-# 	@ $(dep) $(cflags) -x c -std=$(cstd) -MM $< \
-# 		| $(call sub,$(*F).o,$(@D)/$(*F).o $@) > $@
-#
-# 
-# $(bits)/%.d: %.cpp
-# 	@ $(guile (echo-dep-c++ "$@")) 
-# 	@ $(guile (ensure-path! "$(@D)"))
-# 	@ $(dep) $(cflags) -x c++ -std=$(cppstd) -MM $< \
-# 		| $(call sub,$(*F).o,$(@D)/$(*F).o $@) > $@
-# 
-# $(bits)/%.d: $(bits)/%.c
-# 	@ $(guile (echo-dep "$@")) 
-# 	@ $(guile (ensure-path! "$(@D)"))
-# 	@ $(dep) $(cflags) -x c -std=$(cstd) -MM -MG $< \
-# 		| $(call sub,$(*F).o,$(@D)/$(*F).o $@) \
-# 		| $(call sub,\s\+\([^/]\+\.h\)\s*, $(@D)/\1 ) > $@
-
 # Компиляторы С/С++ вычисляют зависимости в довольно неудобной логике. Поэтому
 # необходимо редактирование результатов. Это делает процедура fix-deps,
 # пропуская через себя вывод указанной программы
