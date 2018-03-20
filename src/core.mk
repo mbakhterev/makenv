@@ -165,7 +165,7 @@ $(B)/%.hex: $(B)/%.elf
 $(T)/%.elf:
 	@ $(guile (echo-elf "$@"))
 	@ $(guile (ensure-path! "$(@D)"))
-	@ $(lnk) $^ -o $@ -Wl,-Map=$@.map $(lflags)
+	$(lnk) $^ -o $@ -Wl,-Map=$@.map $(lflags)
 
 $(T)/%.bin: $(T)/%.elf
 	@ $(guile (echo-bin "$@"))
