@@ -5,6 +5,15 @@
 $(guile (load "$(dir $(lastword $(MAKEFILE_LIST)))core.scm"))
 runscm-path := $(guile runscm-path)
 
+# Сперва загружаем файл с настройками инструментария, в нём могут быть
+# определены и другие полезные переменные
+
+ifndef TCN
+TCN := toolchain
+endif
+
+include $(guile (tcn-path "$(TCN)"))
+
 # Для успешной работы должна быть задана директория для сборки. Проверяем
 # наличие переменной и вычисляем физический путь до него.
 
@@ -20,18 +29,6 @@ $(guile (bdir-set! "$(bdir)"))
 endif
 
 bits := $(bdir)/bits
-
-# rootpath = $(patsubst %/,%,$(dir $(firstword $(MAKEFILE_LIST))))
-# nodepath = $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
-# bitspath = $(bits)/$(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
-
-# sub = { sed -e 's:$(1):$(2):g'; }
-
-ifndef TCN
-TCN = toolchain
-endif
-
-include $(guile (tcn-path "$(TCN)"))
 
 # FIXME: это хак, чтобы согласовать переменные в guile и make. Автоматически это
 # согласование плохо работает, при возврате строк из guile для обработки в make.
@@ -165,7 +162,7 @@ $(B)/%.hex: $(B)/%.elf
 $(T)/%.elf:
 	@ $(guile (echo-elf "$@"))
 	@ $(guile (ensure-path! "$(@D)"))
-	$(lnk) $^ -o $@ -Wl,-Map=$@.map $(lflags)
+	@ $(lnk) $^ -o $@ -Wl,-Map=$@.map $(lflags)
 
 $(T)/%.bin: $(T)/%.elf
 	@ $(guile (echo-bin "$@"))
