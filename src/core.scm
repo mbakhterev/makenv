@@ -3,8 +3,8 @@
              (ice-9 match)
              (srfi srfi-42))
 
-(define gmk-expand (lambda (v) ""))
-(define gmk-eval (lambda (v) '()))
+; (define gmk-expand (lambda (v) ""))
+; (define gmk-eval (lambda (v) '()))
 
 ; Вычисление описания системной ошибки по информации об исключении
 (define (error-string fn-name path key args)
