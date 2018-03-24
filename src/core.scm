@@ -1,6 +1,10 @@
-(use-modules (ice-9 popen))
-(use-modules (ice-9 rdelim))
-(use-modules (ice-9 match))
+(use-modules (ice-9 popen)
+             (ice-9 rdelim)
+             (ice-9 match)
+             (srfi srfi-42))
+
+(define gmk-expand (lambda (v) ""))
+(define gmk-eval (lambda (v) '()))
 
 ; Вычисление описания системной ошибки по информации об исключении
 (define (error-string fn-name path key args)
@@ -323,8 +327,9 @@
 
 (define (h-route-subdir target subdir)
   (define headline
-    (let ((\ file-name-separator-string))
-      (string-append I \ target \ "%.h: " (nodepath) \ subdir \ "%.h")))
+    (let ((fns file-name-separator-string))
+      (string-append I fns target (if (string-null? target) "" fns) "%.h: "
+                     (nodepath) fns subdir (if (string-null? subdir) "" fns) "%.h")))
 
   (with-output-to-string
     (lambda ()
@@ -414,13 +419,10 @@
                 (new-sums (with-input-from-port
                             (open-input-pipe (shasum-cmd bcf bibs))
                             (lambda ()
-                              ; (display (shasum-cmd bcf bibs))
-                              ; (newline)
                               (let lp ((l (read-line)))
                                 (if (eof-object? l)
                                   '()
                                   (cons l (lp (read-line)))))))))
-;            (format (current-error-port) "known: ~s~%new: ~s~%bcf-sum: ~s~%" known-sums new-sums bcf-sum)
             (if (equal? known-sums new-sums)
               "true"
               (begin
@@ -428,10 +430,19 @@
                 (string-append (gmk-expand "$(biber)") " " (basename bcf))))))
         handler))))
 
-(define (undefine-vars prefix vars)
+(define (undefine-vars . vars)
+  (define combinations
+    (let lp ((rest vars)
+             (result '()))
+      (if (null? rest)
+        result
+        (lp (cdr rest)
+            (let ((words (filter (compose not string-null?)
+                                 (string-split (car rest) char-set:whitespace))))
+              (if (null? result)
+                words
+                (list-ec (:list a result) (:list b words) (string-append a "-" b))))))))
+
   (with-output-to-string
     (lambda ()
-      (for-each (if (string-null? prefix)
-                  (lambda (v) (format #t "undefine ~a~%" v))
-                  (lambda (v) (format #t "undefine ~a-~a~%" prefix v)))
-                (string-split vars char-whitespace?)))))
+      (for-each (lambda (v) (format #t "undefine ~a~%" v)) combinations))))
