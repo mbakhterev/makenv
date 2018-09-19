@@ -6,6 +6,10 @@
              (srfi srfi-1)
              (srfi srfi-9 gnu))
 
+(define dump-error
+  (let ((p (current-error-port)))
+    (lambda (fmt . args) (apply format p fmt args))))
+
 (define-immutable-record-type Options
   (options suffixes directories target toolchain debug? command)
   options?
@@ -73,9 +77,10 @@
               (else (error "no classifier for:" a)))))))))
 
 (define (watch-loop opts)
-  (define inotify (apply list
-                         "inotifywait" "-rm" "-e" "close_write" "--format" "%:e %f"
-                         (options:directories opts)))
+  (define inotify-command
+    (apply list
+           "inotifywait" "-rm" "-e" "close_write" "--format" "%:e %f"
+           (options:directories opts)))
 
   (define (trigger? str) (any (lambda (s) (string-suffix? s str)) (options:suffixes opts)))
 
@@ -96,6 +101,7 @@
     ; Со стороны основного потока #:net-to-run не может измениться ни на что,
     ; поэтому можно сбросить его в #:accepted без cas-операции и выполнить одну
     ; итерацию сборки. Результат не важен, поэтому без проверок
+    (atomic-box-set! state #:accepted)
     (apply system* (options:command opts))
 
     ; #:accepted может быть переведён снова в need-to-run, поэтому флаг
@@ -104,14 +110,47 @@
       ; Если операция удалось, то основной поток увидит значение #:nothing-to-do
       ; и то перезапустит run-loop. Если не удалась, значит, семафор переброшен
       ; в #:need-to-run и нам надо повторять цикл
-      (when (not (eq? #:accepted v)) (run-loop)))) 
+      (when (not (eq? #:accepted v))
+        ; (dump-error "R: Repeating command~%")
+        (run-loop)))) 
+
+  (define (run-thread)
+    ; (dump-error "M: New run-thread~%")
+    (atomic-box-set! state #:need-to-run)
+    (call-with-new-thread run-loop))
 
   ; Тело процедуры watch-loop
   (setenv "BDIR" (options:target opts))
   (setenv "TCN" (options:toolchain opts))
   (when (options:debug? opts) (setenv "DBG" "Y"))
    
-  (let ((p (apply open-pipe* (options:command opts)))))
+  (let ((p (apply open-pipe* OPEN_READ inotify-command)))
+    (let loop ((info (read-line p)))
+      (if (eof-object? info)
+        (close-pipe p)
+        (let ((t? (trigger? info)))
+          (dump-error "~a: ~a~%" info (if t? "triggered" "skipped"))
+          (when t?
+            (case (atomic-box-ref state)
+              ; Вариант, когда поток запуска команд ничего не собирается
+              ; подхватывать. Нужно его перезапустить, предварительно установив
+              ; флаг о наличии работы. Результат -- созданный поток --
+              ; игнорируем. Потенциальный FIXME.
+              ((#:nothing-to-do) (run-thread))
 
+              ; Флаг уже установлен, и поток запуска команд об этом знает,
+              ((#:need-to-run) ; (dump-error "M: Run-thread should repeat command~%")
+                               '())
 
-  )
+              ; Состояние #:accepted может упасть в #:nothing-to-do. Поэтому его
+              ; надо поднимать в #:need-to-run через cas-гонку. Если гонка
+              ; выиграна, то рабочий поток должен это заметить. Если нет, то
+              ; рабочий поток будет завершаться, и его нужно перезапустить
+              ((#:accepted) (let ((v (atomic-box-compare-and-swap! state #:accepted #:need-to-run)))
+                              (when (not (eq? #:accepted v))
+                                (when (not (eq? #:nothing-to-do v))
+                                  (error "protocol violation: expecting #:nothing-to-do, got:" v))
+                                (run-thread))))))
+          (loop (read-line p)))))))
+
+(watch-loop (collect-options (cdr (command-line))))
