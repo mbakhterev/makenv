@@ -3,6 +3,7 @@
              (ice-9 atomic)
              (ice-9 threads)
              (ice-9 receive)
+             (srfi srfi-1)
              (srfi srfi-9 gnu))
 
 (define-immutable-record-type Options
@@ -71,5 +72,46 @@
               ((#:cmd) (set-options:command opts args))
               (else (error "no classifier for:" a)))))))))
 
-(write (collect-options (cdr (command-line))))
-(newline)
+(define (watch-loop opts)
+  (define inotify (apply list
+                         "inotifywait" "-rm" "-e" "close_write" "--format" "%:e %f"
+                         (options:directories opts)))
+
+  (define (trigger? str) (any (lambda (s) (string-suffix? s str)) (options:suffixes opts)))
+
+  ; Протокол простой. Семафор на трёх состояниях: (< nothing-to-do accepted
+  ; need-to-run). Основной поток, следящий за сообщениями от inotifywait
+  ; тянет значения вверх. Поток, в котором запускается команда, тянет значение
+  ; вниз.  Более подробно в заметке Сб мар 10 20:47:31 +05 2018
+  (define state (make-atomic-box #:nothing-to-do))
+
+  ; Процедура для запуска в потоке, запускающем команду по событию
+  (define (run-loop)
+    ; Сначала убеждаемся, что протокол соблюдается. В начале этого цикла должен
+    ; быть запрос на перезапуск
+    (let ((st (atomic-box-ref state)))
+      (when (not (eq? #:need-to-run st ))
+        (error "Protocol violation. Expecting #:need-to-run. Got:" st)))
+
+    ; Со стороны основного потока #:net-to-run не может измениться ни на что,
+    ; поэтому можно сбросить его в #:accepted без cas-операции и выполнить одну
+    ; итерацию сборки. Результат не важен, поэтому без проверок
+    (apply system* (options:command opts))
+
+    ; #:accepted может быть переведён снова в need-to-run, поэтому флаг
+    ; меняем через cas
+    (let ((v (atomic-box-compare-and-swap! state #:accepted #:nothing-to-do)))
+      ; Если операция удалось, то основной поток увидит значение #:nothing-to-do
+      ; и то перезапустит run-loop. Если не удалась, значит, семафор переброшен
+      ; в #:need-to-run и нам надо повторять цикл
+      (when (not (eq? #:accepted v)) (run-loop)))) 
+
+  ; Тело процедуры watch-loop
+  (setenv "BDIR" (options:target opts))
+  (setenv "TCN" (options:toolchain opts))
+  (when (options:debug? opts) (setenv "DBG" "Y"))
+   
+  (let ((p (apply open-pipe* (options:command opts)))))
+
+
+  )
