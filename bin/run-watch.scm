@@ -1,156 +1,72 @@
+; Реализация на основе классических POSIX-механизмов
+
+(add-to-load-path (let ((fn (current-filename))) (if (string? fn) (dirname fn) ".")))
+
 (use-modules (ice-9 popen)
              (ice-9 rdelim)
-             (ice-9 atomic)
-             (ice-9 threads)
-             (ice-9 receive)
-             (srfi srfi-1)
-             (srfi srfi-9 gnu))
+             (srfi srfi-41)
+             (common))
 
-(define dump-error
-  (let ((p (current-error-port)))
-    (lambda (fmt . args) (apply format p fmt args))))
+(define-stream (events ))
 
-(define-immutable-record-type Options
-  (options suffixes directories target toolchain debug? command)
-  options?
-  (suffixes options:suffixes set-options:suffixes)
-  (directories options:directories set-options:directories)
-  (target options:target set-options:target)
-  (toolchain options:toolchain set-options:toolchain)
-  (debug? options:debug? set-options:debug?)
-  (command options:command set-options:command))
+(define (main-loop opts)
+  (define to-read car)
+  (define to-write cdr)
+  (define of-child first)
+  (define of-watch second)
+ 
+  (let* ((p (pipe))
+         (p-child (to-read p))
+         (p-watch (apply open-pipe* OPEN_READ (inotify-command opts)))
+         (poll (lambda () (catch 'system-error
+                                 (lambda () (first (select (list p-child p-watch) '() '() #f)))
+                                 (lambda err (if (= EINTR (system-error-errno err))
+                                               (select (list p-child p-watch) '() '() #f)
+                                               (apply throw err))))))
+         ; Основная идея: у нас есть поток событий, который упорядочивается
+         ; select-ом, мы бежим по цепочке этих событий, обновляя состояние,
+         ; которое определит ту операцию, которую нужно выполнить 
+         (next-state-from-pipe
+           (lambda (pipe state)
+             (let ((info (read-line pipe)))
+               (if (eof-object? info)
+                 (begin (close-pipe pipe)
+                        #:done)
+                 (let ((t? (trigger? opts info)))
+                   (dump-error "~a: ~a~%" info (if t? "triggered" "skipped"))
+                   (if (not t?)
+                     state
+                     (case state
+                       ((#:idle) #:restart)
+                       ()
+                       )
+                     )
+                   )
+                 )
+               )
+             ))
+         (next-state (lambda (port state)
+                       (cond
+                         ((equal? p-watch port)
+                          (let ((info (read-line port)))
+                            (if (eof-object? info)
+                              (begin (close-pipe port)
+                                     #:done)
+                              )
+                            
+                            (if (not t?)
+                              state
+                              )
+                            )
+                          )
 
-; Можно использовать стандартные процедуры разбора опций, например, getopt-long.
-; Но в этих стандартных процедурах не реализуема логика, в которой ключи
-; изменяют режимы разбора аргументов. Не хочется, ведь, вместо «-s a b c d»
-; писать «-s a -s b -s c -s d». Поэтому самодельный разбор опций
-(define (collect-options arguments)
-  ; Замена неопределённых значений на значения по-умолчанию
-  (define (defaultize o)
-    (let ((sfxs (options:suffixes o))
-          (dirs (options:directories o))
-          (tgt (options:target o))
-          (tcn (options:toolchain o))
-          (cmd (options:command o)))
-      (set-fields o
-                  ((options:suffixes) (if (null? sfxs) '("") sfxs))
-                  ((options:directories) (if (null? dirs) '(".") dirs))
-                  ((options:toolchain) (if (string-null? tcn) "toolchain" tcn))
-                  ((options:target) (if (string-null? tgt) "/tmp/bdir" tgt))
-                  ((options:command) (if (null? cmd) '("make") cmd)))))
-
-  (define (flag? a) (and (= 2 (string-length a))
-                         (eq? #\- (string-ref a 0))))
-  
-  ; Тело процедуры collect-options
-  (defaultize
-    (let loop ((mode #:none)
-               (args arguments)
-               (opts (options '() '() "" "" #f '())))
-      (if (null? args)
-        opts
-        (let ((a (car args))
-              (rest (cdr args)))
-          (if (flag? a)
-            (case (string-ref a 1)
-              ((#\s) (loop #:sfx rest opts))
-              ((#\d) (loop #:dir rest opts))
-              ((#\r) (loop #:cmd rest opts))
-              ((#\D) (loop #:none rest (set-options:debug? opts #t)))
-              ((#\B) (let ((tgt (options:target opts))) (if (string-null? tgt)
-                                                          (loop #:tgt rest opts)
-                                                          (error "build dir is already specified:" tgt))))
-              ((#\T) (let ((tcn (options:toolchain opts))) (if (string-null? tcn)
-                                                             (loop #:tcn rest opts)
-                                                             (error "toolchain is already specified:" tcn))))
-              (else (error "unknown option:" a)))
-            (case mode
-              ((#:sfx) (loop mode
-                             rest
-                             (set-options:suffixes opts (cons a (options:suffixes opts)))))
-              ((#:dir) (loop mode
-                             rest
-                             (set-options:directories opts (cons a (options:directories opts)))))
-              ((#:tcn) (loop #:none rest (set-options:toolchain opts a)))
-              ((#:tgt) (loop #:none rest (set-options:target opts a)))
-              ((#:cmd) (set-options:command opts args))
-              (else (error "no classifier for:" a)))))))))
-
-(define (watch-loop opts)
-  (define inotify-command
-    (apply list
-           "inotifywait" "-rm" "-e" "close_write" "--format" "%:e %f"
-           (options:directories opts)))
-
-  (define (trigger? str) (any (lambda (s) (string-suffix? s str)) (options:suffixes opts)))
-
-  ; Протокол простой. Семафор на трёх состояниях: (< nothing-to-do accepted
-  ; need-to-run). Основной поток, следящий за сообщениями от inotifywait
-  ; тянет значения вверх. Поток, в котором запускается команда, тянет значение
-  ; вниз.  Более подробно в заметке Сб мар 10 20:47:31 +05 2018
-  (define state (make-atomic-box #:nothing-to-do))
-
-  ; Процедура для запуска в потоке, запускающем команду по событию
-  (define (run-loop)
-    ; Сначала убеждаемся, что протокол соблюдается. В начале этого цикла должен
-    ; быть запрос на перезапуск
-    (let ((st (atomic-box-ref state)))
-      (when (not (eq? #:need-to-run st ))
-        (error "Protocol violation. Expecting #:need-to-run. Got:" st)))
-
-    ; Со стороны основного потока #:net-to-run не может измениться ни на что,
-    ; поэтому можно сбросить его в #:accepted без cas-операции и выполнить одну
-    ; итерацию сборки. Результат не важен, поэтому без проверок
-    (atomic-box-set! state #:accepted)
-    (apply system* (options:command opts))
-
-    ; #:accepted может быть переведён снова в need-to-run, поэтому флаг
-    ; меняем через cas
-    (let ((v (atomic-box-compare-and-swap! state #:accepted #:nothing-to-do)))
-      ; Если операция удалось, то основной поток увидит значение #:nothing-to-do
-      ; и то перезапустит run-loop. Если не удалась, значит, семафор переброшен
-      ; в #:need-to-run и нам надо повторять цикл
-      (when (not (eq? #:accepted v))
-        ; (dump-error "R: Repeating command~%")
-        (run-loop)))) 
-
-  (define (run-thread)
-    ; (dump-error "M: New run-thread~%")
-    (atomic-box-set! state #:need-to-run)
-    (call-with-new-thread run-loop))
-
-  ; Тело процедуры watch-loop
-  (setenv "BDIR" (options:target opts))
-  (setenv "TCN" (options:toolchain opts))
-  (when (options:debug? opts) (setenv "DBG" "Y"))
-   
-  (let ((p (apply open-pipe* OPEN_READ inotify-command)))
-    (let loop ((info (read-line p)))
-      (if (eof-object? info)
-        (close-pipe p)
-        (let ((t? (trigger? info)))
-          (dump-error "~a: ~a~%" info (if t? "triggered" "skipped"))
-          (when t?
-            (case (atomic-box-ref state)
-              ; Вариант, когда поток запуска команд ничего не собирается
-              ; подхватывать. Нужно его перезапустить, предварительно установив
-              ; флаг о наличии работы. Результат -- созданный поток --
-              ; игнорируем. Потенциальный FIXME.
-              ((#:nothing-to-do) (run-thread))
-
-              ; Флаг уже установлен, и поток запуска команд об этом знает,
-              ((#:need-to-run) ; (dump-error "M: Run-thread should repeat command~%")
-                               '())
-
-              ; Состояние #:accepted может упасть в #:nothing-to-do. Поэтому его
-              ; надо поднимать в #:need-to-run через cas-гонку. Если гонка
-              ; выиграна, то рабочий поток должен это заметить. Если нет, то
-              ; рабочий поток будет завершаться, и его нужно перезапустить
-              ((#:accepted) (let ((v (atomic-box-compare-and-swap! state #:accepted #:need-to-run)))
-                              (when (not (eq? #:accepted v))
-                                (when (not (eq? #:nothing-to-do v))
-                                  (error "protocol violation: expecting #:nothing-to-do, got:" v))
-                                (run-thread))))))
-          (loop (read-line p)))))))
-
-(watch-loop (collect-options (cdr (command-line))))
+                         ((equal? p-child port))
+                         (else (error "Unexpected:" port)))
+                       ))
+         )
+    (let loop ((state #:idle)
+               (events (poll)))
+      (fold (lambda (p st)))
+      )
+    )
+  )
