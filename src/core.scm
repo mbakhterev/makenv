@@ -6,26 +6,32 @@
 ; (define gmk-expand (lambda (v) ""))
 ; (define gmk-eval (lambda (v) '()))
 
-; Вычисление описания системной ошибки по информации об исключении
-(define (error-string fn-name path key args)
-  (case (symbol->keyword key)
-    ((#:system-error)
-     (let ((errstr (strerror (system-error-errno (cons 'system-error args)))))
-       (format #f "~a: ~a: ~a" fn-name path errstr)))
-    ((#:internal)
-     (format #f "~a: ~a: ~a" fn-name path (car args)))))
+; Вычисление описания системной ошибки по err -- информации об исключении
+(define (error-string fn-name path err)
+  (format #f "~a: ~a: ~a"
+          fn-name path
+          (cond ((eq? 'system-error (car err)) (strerror (system-error-errno err)))
+                ((eq? 'internal (car err)) (cadr err)))))
 
-; Процедура для разбиения пути на элементы
-(define (split-path path)
-  (let ((items (filter (compose not string-null?)
-                       (string-split path file-name-separator?))))
-    (if (absolute-file-name? path)
-      (cons file-name-separator-string items)
-      items))) 
+; Составление пути из отдельных компонент
+(define join-path
+  (let ((s file-name-separator-string))
+    (lambda args (if (string=? s (car args))
+                   (string-join (cdr args) s 'prefix)
+                   (string-join args s)))))
+
+; Процедура для разбиения пути на элементы 
+(define split-path
+  (let ((s file-name-separator-string))
+    (lambda (str)
+      (let ((path (filter (compose not string-null?)
+                          (string-split str file-name-separator?))))
+        (if (not (string-prefix? s str))
+          path
+          (cons s path))))))
 
 ; Остановка make по ошибке. Возврат "$(error ...)" не срабатывает -- make
 ; интерпретирует возвращаемые строки как правила.
-
 (define (gmk-error fmt . vals)
   (gmk-eval (string-append "$(error " (apply format #f fmt vals) ")")))
 
@@ -34,7 +40,6 @@
 (define bdir-items '())
 
 ; Плюс набор переменных для часто используемых целевых директорий
-
 (define B "")
 (define I "")
 (define T "")
@@ -45,44 +50,44 @@
 ; доступность. Если проверка не пройдена, то bdir-set! вызывает ошибку в make.
 
 (define (bdir-set! path)
-  (define (handler key . args)
-    (gmk-error (error-string 'bdir-set! path key args)))
+  (define handler (lambda err (gmk-error (error-string 'bdir-set! path err))))
+
+  ; Проверка структуры stat на соответствие типу и режиму доступа 
+  (define mode-rwx #o700)  
+  (define (stat-match? st type mode) (and (eqv? type (stat:type st))
+                                          (eqv? mode (logand mode (stat:mode st)))))
 
   (catch
     #t
-    (lambda () (let ((st (stat path)))
-                 (if (and (eqv? 'directory (stat:type st))
-                          (eqv? #o700 (logand #o700 (stat:mode st))))
-                   (begin (set! bdir path)
-                          (set! bdir-items (split-path path))
-                          (let ((/ file-name-separator-string))
-                            (set! B (string-append bdir / "bin"))
-                            (set! L (string-append bdir / "lib"))
-                            (set! I (string-append bdir / "include"))
-                            (set! T (string-append bdir / "tst"))
-                            (set! D (string-append bdir / "txt"))))
-                   (throw 'internal "is not accessible (700) directory"))))
+    (lambda () (if (stat-match? (stat path) 'directory mode-rwx)
+                 (begin (set! bdir path)
+                        (set! bdir-items (split-path path))
+                        (set! B (join-path bdir "bin"))
+                        (set! L (join-path bdir "lib"))
+                        (set! I (join-path bdir "include"))
+                        (set! T (join-path bdir "tst"))
+                        (set! D (join-path bdir "txt")))
+                 (throw 'internal "is not accessible (700) directory")))
     handler))
 
 ; Процедура убеждающаяся в доступности директории по указанному пути. Если
-; компоненты пути не созданы, она их создаёт. Аналог mkdir -p 
-
+; компоненты пути не созданы, она их создаёт. Аналог mkdir -p
 (define (ensure-path! path)
   ; Вспомогательные процедуры
 
   ; Проверка корректности пути. Разрешаем только те, что не ведут обратно вверх,
   ; и не содержат повторений текущей директории.
-
   (define (path-correct? items)
-    (and (not (equal? ".." (car items)))
-         (and-map (lambda (i) (not (or (equal? i ".") (equal? i "..")))) (cdr items))))
+    (and (not (string=? ".." (car items)))
+         (and-map (lambda (i) (not (or (string=? i ".")
+                                       (string=? i ".."))))
+                  (cdr items))))
 
   ; Перемотка элементов пути вдоль bdir. Каждый корректный путь должен
   ; начинаться с префикса, равного bdir: мы не хотим портить дерево директорий
   ; пользователю и писать в места, о которых она не догадывается. Если префиксы
   ; не совпадают, процедура возвращает #f, если совпадают, то возвращается
   ; остаток пути.
-
   (define (rewind-path path)
     (let loop ((p path) (b bdir-items))
       (cond ((null? b) p)
@@ -91,27 +96,24 @@
 
   ; Процедура меняющая текущую директорию вдоль path. Возвращает либо остаток
   ; пути, либо #f, как индикация ошибки: невозможность пройти вдоль пути.
-
   (define (into-dirs! path)
     ; Обработчик ошибок от chdir. Логика такая: если соответствующей записи не
     ; существует, то всё хорошо, нужно создать цепочку оставшихся директорий,
     ; передающуюся в path; в остальных случаях непреодолимая ошибка.
-
-    (define (handler items)
-      (lambda error
-        (let ((errno (system-error-errno error)))
-          (cond ((eqv? ENOENT errno) items)
-                (else (apply throw error))))))
+    (define (handler items) (lambda err (let ((errno (system-error-errno error)))
+                                          (cond ((eqv? ENOENT errno) items)
+                                                (else (apply throw err))))))
 
     (let loop ((items path))
       (if (null? items)
         '()
         (let ((v (catch 'system-error (lambda () (chdir (car items))) (handler items))))
-          (if (not (unspecified? v)) v (loop (cdr items)))))))
+          (if (not (unspecified? v))
+            v
+            (loop (cdr items)))))))
 
   ; Процедура для создания остатка пути. Обработка ошибок вынесена в
   ; нижеследующий catch
-
   (define (make-dirs! path)
     (let loop ((items path))
       (if (not (null? items))
@@ -448,7 +450,7 @@
       (for-each (lambda (v) (format #t "undefine ~a~%" v)) combinations))))
 
 (define (std-tex-rules target sources routes)
-  (let ((bits )))
-  (format (current-error-port)
-          "target: ~s~%sources: ~s~%routes: ~s~%bitspath: ~s~%"
-          target sources routes (bitspath)))
+  (let ((bits (bitspath)))
+    (format (current-error-port)
+            "target: ~s~%sources: ~s~%routes: ~s~%bitspath: ~s~%"
+            target sources routes bits)))
