@@ -3,7 +3,6 @@
 # поддержку Guile Scheme
 
 $(guile (load "$(dir $(lastword $(MAKEFILE_LIST)))core.scm"))
-runscm-path := $(guile runscm-path)
 
 # Сперва загружаем файл с настройками инструментария, в нём могут быть
 # определены и другие полезные переменные
@@ -219,17 +218,17 @@ $(bits)/%.tex: %.tex
 	@ $(guile (ensure-path! "$(@D)"))
 	@ iconv -t $(texcode) < $< > $@
 
-$(B)/%.xtex: %.xtex
+$(bits)/%.xtex: %.xtex
 	@ $(guile (echo-xtex/cp "$@"))
 	@ $(guile (ensure-path! "$(@D)"))
 	@ cp $< $@
 
-$(B)/%.sty: %.sty
+$(bits)/%.sty: %.sty
 	@ $(guile (echo-sty/cnv "$@"))
 	@ $(guile (ensure-path! "$(@D)"))
 	@ iconv -t $(texcode) < $< > $@
 
-$(B)/%.bib: %.bib
+$(bits)/%.bib: %.bib
 	@ $(guile (echo-bib/cnv "$@"))
 	@ $(guile (ensure-path! "$(@D)"))
 	@ iconv -t $(texcode) < $< > $@
