@@ -6,6 +6,10 @@
 ; (define gmk-expand (lambda (v) ""))
 ; (define gmk-eval (lambda (v) '()))
 
+(define dump-error
+  (let ((p (current-error-port)))
+    (lambda (fmt . args) (apply format p fmt args))))
+
 ; Вычисление описания системной ошибки по err -- информации об исключении
 (define (error-string fn-name path err)
   (format #f "~a: ~a: ~a"
@@ -102,14 +106,19 @@
     ; Обработчик ошибок от chdir. Логика такая: если соответствующей записи не
     ; существует, то всё хорошо, нужно создать цепочку оставшихся директорий,
     ; передающуюся в path; в остальных случаях непреодолимая ошибка.
-    (define (handler items) (lambda err (let ((errno (system-error-errno error)))
-                                          (cond ((eqv? ENOENT errno) items)
-                                                (else (apply throw err))))))
+    (define (handler items)
+      (lambda err
+        ; (dump-error "handler: items: ~s~%" items)
+        (let ((errno (system-error-errno err)))
+          (cond ((eqv? ENOENT errno) items)
+                (else (apply throw err))))))
 
     (let loop ((items path))
+      ; (dump-error "changing dir to: ~s~%" (car path))
       (if (null? items)
         '()
         (let ((v (catch 'system-error (lambda () (chdir (car items))) (handler items))))
+          ; (dump-error "items: ~s~%" v)
           (if (not (unspecified? v))
             v
             (loop (cdr items)))))))
