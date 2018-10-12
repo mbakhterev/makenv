@@ -446,3 +446,9 @@
   (with-output-to-string
     (lambda ()
       (for-each (lambda (v) (format #t "undefine ~a~%" v)) combinations))))
+
+(define (std-tex-rules target sources routes)
+  (let ((bits )))
+  (format (current-error-port)
+          "target: ~s~%sources: ~s~%routes: ~s~%bitspath: ~s~%"
+          target sources routes (bitspath)))

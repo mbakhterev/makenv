@@ -13,7 +13,9 @@
 
   (define signal-pipe (pipe))
   (define p-signal (to-read signal-pipe))
-  (define p-watch (apply open-pipe* OPEN_READ (inotify-command opts)))
+  (define p-watch (let ((cmd (inotify-command opts)))
+                    (format #t "inotify command: ~s~%" cmd)
+                    (apply open-pipe* OPEN_READ cmd)))
 
   (define (poll) (catch 'system-error
                         (lambda () (car (select (list p-signal p-watch) '() '() #f)))
@@ -54,7 +56,10 @@
   (define cmdline (options:command opts))
 
   (define (run-cmd) (let ((p (primitive-fork)))
-                      (if (not (zero? p)) p (apply execlp (car cmdline) cmdline))))
+                      (if (not (zero? p))
+                        p 
+                        (begin (tune-env! opts)
+                               (apply execlp (car cmdline) cmdline)))))
 
   ; Состояние -- это пара (pid есть-ли-работа?)
   (define pid car)
