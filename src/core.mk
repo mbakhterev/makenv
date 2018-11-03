@@ -260,3 +260,5 @@ $(D)/%.pdf:
 	@ cp $< $@
 
 endif # группа правил {Xe}LaTeX
+
+word-list = (list $(foreach w,$(1),"$(w)"))
