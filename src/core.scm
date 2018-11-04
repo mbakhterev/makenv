@@ -345,13 +345,14 @@
                    (join-path source pat))))
 
 (define (tex-route source ext)
-  (with-output-to-string
-    (lambda ()
-      (format #t "~a~%~/~a~%~/~a~%~/~a~%"
-              (form-headline source ext "tex")
-              "@ $(guile (echo-tex/cnv \"$@\"))"
-              "@ $(guile (ensure-path! \"$(@D)\"))"
-              "@ iconv -t $(texcode) < '$<' > '$@'"))))
+  (let ((reroot (lambda (str) (if (absolute-file-name? str) str (join-path root str)))))
+    (with-output-to-string
+      (lambda ()
+        (format #t "~a~%~/~a~%~/~a~%~/~a~%"
+                (form-headline (reroot source) ext "tex")
+                "@ $(guile (echo-tex/cnv \"$@\"))"
+                "@ $(guile (ensure-path! \"$(@D)\"))"
+                "@ iconv -t $(texcode) < '$<' > '$@'")))))
 
 (define (pix-route source ext)
   (with-output-to-string
@@ -438,13 +439,12 @@
       (for-each (lambda (v) (format #t "undefine ~a~%" v)) combinations))))
 
 (define (std-tex-rules target sources routes)
-  (let* ((reroot (lambda (str) (if (absolute-file-name? str) str (join-path root str))))
-         (bits (bitspath))
+  (let* ((bits (bitspath))
          (t (join-path bits target))
          (s (string-join (map (lambda (p) (join-path bits p)) sources) " ")))
     (with-output-to-string
       (lambda ()
         ; (format #t "target: ~s~%sources: ~s~%bits: ~s~%" target sources bits)
         (format #t "~a: ~a~%" t s)
-        (for-each (lambda (p) (format #t "~%~a" (tex-route (reroot (car p)) (cdr p))))
+        (for-each (lambda (p) (format #t "~%~a" (tex-route (car p) (cdr p))))
                   routes)))))
