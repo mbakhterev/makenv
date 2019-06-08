@@ -1,31 +1,43 @@
 (use-modules (ice-9 popen)
              (ice-9 rdelim)
-             (ice-9 match)
+             (ice-9 receive)
              (srfi srfi-42))
 
 ; (define gmk-expand (lambda (v) ""))
 ; (define gmk-eval (lambda (v) '()))
 
-; Вычисление описания системной ошибки по информации об исключении
-(define (error-string fn-name path key args)
-  (case (symbol->keyword key)
-    ((#:system-error)
-     (let ((errstr (strerror (system-error-errno (cons 'system-error args)))))
-       (format #f "~a: ~a: ~a" fn-name path errstr)))
-    ((#:internal)
-     (format #f "~a: ~a: ~a" fn-name path (car args)))))
+(define dump-error
+  (let ((p (current-error-port)))
+    (lambda (fmt . args) (apply format p fmt args))))
 
-; Процедура для разбиения пути на элементы
-(define (split-path path)
-  (let ((items (filter (compose not string-null?)
-                       (string-split path file-name-separator?))))
-    (if (absolute-file-name? path)
-      (cons file-name-separator-string items)
-      items))) 
+; Вычисление описания системной ошибки по err -- информации об исключении
+(define (error-string fn-name path err)
+  (format #f "~a: ~a: ~a"
+          fn-name path
+          (cond ((eq? 'system-error (car err)) (strerror (system-error-errno err)))
+                ((eq? 'internal (car err)) (cadr err)))))
+
+; Составление пути из отдельных компонент
+(define join-path
+  (let ((s file-name-separator-string))
+    (lambda arguments
+      (let ((args (filter (compose not string-null?) arguments)))
+        (if (string=? s (car args))
+          (string-join (cdr args) s 'prefix)
+          (string-join args s))))))
+
+; Процедура для разбиения пути на элементы 
+(define split-path
+  (let ((s file-name-separator-string))
+    (lambda (str)
+      (let ((path (filter (compose not string-null?)
+                          (string-split str file-name-separator?))))
+        (if (not (string-prefix? s str))
+          path
+          (cons s path))))))
 
 ; Остановка make по ошибке. Возврат "$(error ...)" не срабатывает -- make
 ; интерпретирует возвращаемые строки как правила.
-
 (define (gmk-error fmt . vals)
   (gmk-eval (string-append "$(error " (apply format #f fmt vals) ")")))
 
@@ -34,7 +46,6 @@
 (define bdir-items '())
 
 ; Плюс набор переменных для часто используемых целевых директорий
-
 (define B "")
 (define I "")
 (define T "")
@@ -45,44 +56,44 @@
 ; доступность. Если проверка не пройдена, то bdir-set! вызывает ошибку в make.
 
 (define (bdir-set! path)
-  (define (handler key . args)
-    (gmk-error (error-string 'bdir-set! path key args)))
+  (define handler (lambda err (gmk-error (error-string 'bdir-set! path err))))
+
+  ; Проверка структуры stat на соответствие типу и режиму доступа 
+  (define mode-rwx #o700)  
+  (define (stat-match? st type mode) (and (eqv? type (stat:type st))
+                                          (eqv? mode (logand mode (stat:mode st)))))
 
   (catch
     #t
-    (lambda () (let ((st (stat path)))
-                 (if (and (eqv? 'directory (stat:type st))
-                          (eqv? #o700 (logand #o700 (stat:mode st))))
-                   (begin (set! bdir path)
-                          (set! bdir-items (split-path path))
-                          (let ((/ file-name-separator-string))
-                            (set! B (string-append bdir / "bin"))
-                            (set! L (string-append bdir / "lib"))
-                            (set! I (string-append bdir / "include"))
-                            (set! T (string-append bdir / "tst"))
-                            (set! D (string-append bdir / "txt"))))
-                   (throw 'internal "is not accessible (700) directory"))))
+    (lambda () (if (stat-match? (stat path) 'directory mode-rwx)
+                 (begin (set! bdir path)
+                        (set! bdir-items (split-path path))
+                        (set! B (join-path bdir "bin"))
+                        (set! L (join-path bdir "lib"))
+                        (set! I (join-path bdir "include"))
+                        (set! T (join-path bdir "tst"))
+                        (set! D (join-path bdir "txt")))
+                 (throw 'internal "is not accessible (700) directory")))
     handler))
 
 ; Процедура убеждающаяся в доступности директории по указанному пути. Если
-; компоненты пути не созданы, она их создаёт. Аналог mkdir -p 
-
+; компоненты пути не созданы, она их создаёт. Аналог mkdir -p
 (define (ensure-path! path)
   ; Вспомогательные процедуры
 
   ; Проверка корректности пути. Разрешаем только те, что не ведут обратно вверх,
   ; и не содержат повторений текущей директории.
-
   (define (path-correct? items)
-    (and (not (equal? ".." (car items)))
-         (and-map (lambda (i) (not (or (equal? i ".") (equal? i "..")))) (cdr items))))
+    (and (not (string=? ".." (car items)))
+         (and-map (lambda (i) (not (or (string=? i ".")
+                                       (string=? i ".."))))
+                  (cdr items))))
 
   ; Перемотка элементов пути вдоль bdir. Каждый корректный путь должен
   ; начинаться с префикса, равного bdir: мы не хотим портить дерево директорий
   ; пользователю и писать в места, о которых она не догадывается. Если префиксы
   ; не совпадают, процедура возвращает #f, если совпадают, то возвращается
   ; остаток пути.
-
   (define (rewind-path path)
     (let loop ((p path) (b bdir-items))
       (cond ((null? b) p)
@@ -91,27 +102,29 @@
 
   ; Процедура меняющая текущую директорию вдоль path. Возвращает либо остаток
   ; пути, либо #f, как индикация ошибки: невозможность пройти вдоль пути.
-
   (define (into-dirs! path)
     ; Обработчик ошибок от chdir. Логика такая: если соответствующей записи не
     ; существует, то всё хорошо, нужно создать цепочку оставшихся директорий,
     ; передающуюся в path; в остальных случаях непреодолимая ошибка.
-
     (define (handler items)
-      (lambda error
-        (let ((errno (system-error-errno error)))
+      (lambda err
+        ; (dump-error "handler: items: ~s~%" items)
+        (let ((errno (system-error-errno err)))
           (cond ((eqv? ENOENT errno) items)
-                (else (apply throw error))))))
+                (else (apply throw err))))))
 
     (let loop ((items path))
+      ; (dump-error "changing dir to: ~s~%" (car path))
       (if (null? items)
         '()
         (let ((v (catch 'system-error (lambda () (chdir (car items))) (handler items))))
-          (if (not (unspecified? v)) v (loop (cdr items)))))))
+          ; (dump-error "items: ~s~%" v)
+          (if (not (unspecified? v))
+            v
+            (loop (cdr items)))))))
 
   ; Процедура для создания остатка пути. Обработка ошибок вынесена в
   ; нижеследующий catch
-
   (define (make-dirs! path)
     (let loop ((items path))
       (if (not (null? items))
@@ -125,15 +138,14 @@
   ; того, чтобы сломать вызывающий make в нужном месте, возвращается строчка
   ; "false", интерпретация которой приведёт к прерыванию исполнения цепочки
   ; команд рецепта
-
-  (define (handler key . args)
-    (format (current-error-port) "~s" (error-string 'ensure-path! path key args))
-    "false")
+  (define handler
+    (lambda err
+      (format (current-error-port) "~s" (error-string 'ensure-path! path err))
+      "false"))
 
   ; Основная работа. Нужно гарантировать вызов (chdir cwd) по завершении работы,
   ; вне зависимости от возникших ошибок. Поэтому код обёрнут в два catch.
   ; Внешний ловит ошибку getcwd.
-
   (catch
     'system-error
     (lambda ()
@@ -159,29 +171,24 @@
 ; Базовая директория makenv. Определение по пути до текущего файла.
 (define base (dirname (current-filename)))
 
-; Положение вспомогательного скрипта
-
-(define runscm-path (string-append base file-name-separator-string "run.scm"))
-
 ; Корень дерева исходных файлов. Определяется по координатам самого первого
 ; make-файла в списке
 (define root (dirname (gmk-expand "$(firstword $(MAKEFILE_LIST))")))
 
 ; Определение пути до текущего файла
 (define (nodepath) (dirname (gmk-expand "$(lastword $(MAKEFILE_LIST))")))
-(define (bitspath) (string-append (gmk-expand "$(bits)") file-name-separator-string (nodepath)))
+(define (bitspath) (join-path (gmk-expand "$(bits)") (nodepath)))
 
 ; Процедура вывода информации о выполняемом сценарии. Чтобы имитировать
 ; покомандное выполнение рецептов придётся делать в стиле свободной монадки
 ; (возвращаем команду, которую будет интерпретировать make) с двойной передачей
 ; и интерпретацией данных. TODO: придётся так же впоследствии формировать
 ; команду в зависимости от используемой оболочки.
-
-(define (echo job target) (format #f "echo '\t~a\t~a'" job target))
+(define (echo job target) (format #f "echo '~/~a~/~a'" job target))
 
 (define-syntax make-echoes
-  (let ((rename (lambda (ns) (map (lambda (n) (string->symbol (string-append "echo-" (syntax->datum n))))
-                                  ns))))
+  (let ((rename (lambda (ns)
+                  (map (lambda (n) (string->symbol (string-append "echo-" (syntax->datum n)))) ns))))
     (lambda (x)
       (syntax-case x ()
         ((make-echoes j ...)
@@ -198,15 +205,12 @@
 
 ; Процедура для проверки определённости всех переменных, перечисленных по именам
 ; через пробел. 
-
 (define (check-vars group-name variables)
   (let* ((vs (string-split variables char-set:whitespace))
          (undefined-var? (lambda (v) (string=? "undefined" (gmk-expand (format #f "$(origin ~a)" v)))))
          (undefined (filter undefined-var? vs)))
     (if (not (null? undefined))
       (gmk-error "~a: undefined variables: ~a" group-name undefined))))
-
-; (for-each (lambda (v) (display v) (display (gmk-expand (format #f "$(origin ~a)" v))) (newline)) vs) 
 
 ; Процедура возвращает подстроку без расширения - суффикса, начинающегося с «.»
 (define (drop-ext str)
@@ -217,32 +221,34 @@
 ; расширения. Если префикс или расширение заданы пустыми строками, то
 ; соответствующее преобразование не осуществляется
 
-(define (reform paths prefix ext)
+(define (reform prefix paths ext)
   ; Порождение функции редактирования, дабы не считать if для каждого пути
   (define (mk-transform prefix ext)
-    (compose (if (string-null? prefix) identity (lambda (str) (string-append prefix
-                                                                             file-name-separator-string
-                                                                             str)))
+    (compose (if (string-null? prefix) identity (lambda (str) (join-path prefix str)))
              (if (string-null? ext) identity (lambda (str) (string-append (drop-ext str) "." ext)))))
 
   ; Make должна автоматически подхватить список и превратить его в строку слов
   (map (mk-transform prefix ext)
        (filter (compose not string-null?) (string-split paths char-set:whitespace))))
 
-; Специальные варианты reform. Для уменьшения потока данных между guile и make.
-(define (f2o prefix paths) (reform paths prefix "o"))
-(define (f2d paths) (reform paths "" "d"))
-(define (f2p prefix paths) (reform paths prefix ""))
+; Специальные варианты reform.
+
+; Добавка к путям префикса и замена расширения на .o
+(define (f2o prefix paths) (reform prefix paths "o"))
+
+; Замена расширения путей на .d
+(define (f2d paths) (reform "" paths "d"))
+
+; Добавка к путям префиксов
+(define (f2p prefix paths) (reform prefix paths ""))
 
 ; Функция должна прочитать результат cmd (которая должна быть командой запуска
 ; компилятора с опциями для генерации зависимостей исходного .c или .cpp файла),
 ; и модифицировать его с учётом makenv. Для этого нужно открыть два порта и
 ; обработать, следовательно, два исключения. Неудобно. Возможно, я
 ; перестраховщик
-
 (define (fix-deps cmd target)
-  ; Префикс, который надо добавить к целям в .d-файле, определяется по пути к
-  ; цели.
+  ; Префикс, добавляемый к целям в .d-файле, определяется по пути к цели.
   (define dir (dirname target))
 
   ; Функция обработки одной строки. Не хочется в ней работать с портами, поэтому
@@ -252,29 +258,29 @@
   ; описывающих предпосылки, связанных вместе символом переноса строки \.
   ; Функция возвращает пару из следующего состояния и преобразованной (если
   ; нужно) строки.
-
   (define (fix-string state str)
-    (define (next-state str) (if (eqv? #\\ (string-ref str (- (string-length str) 1))) #:copy #:start))
+    (define (next-state str)
+      (if (eqv? #\\ (string-ref str (- (string-length str) 1))) #:copy #:start))
 
     (define (reformat str colpos)
-      (let* ((objname (substring/read-only str 0 colpos))
+      (let* ((objname (join-path dir (substring/read-only str 0 colpos)))
              (justname (drop-ext objname))
              (prereqs (substring/read-only str colpos)))
-        (format #f "~a/~a ~a/~a.d~a" dir objname dir justname prereqs)))
+        (format #f "~a ~a.d~a" objname justname prereqs)))
 
     (case state
       ((#:start) (let ((colpos (string-index str #\:)))
                    (if (not colpos)
-                     (vector #:no-target str)
-                     (vector (next-state str) (reformat str colpos)))))
-      ((#:copy) (vector (next-state str) str))))
+                     (values #:no-target str)
+                     (values (next-state str) (reformat str colpos)))))
+      ((#:copy) (values (next-state str) str))))
 
   ; Генерация параметризованного обработчика исключений для красивых сообщений
   ; об ошибках
 
   (define (handler item on-error)
-    (lambda (key . args)
-      (format (current-error-port) "~s" (error-string 'ensure-path! item key args))
+    (lambda err
+      (format (current-error-port) "~s" (error-string 'fix-deps item err))
       on-error))
 
   (define (intercepting-apply fn arg) (catch 'system-error (lambda () (fn arg)) (handler arg #f)))
@@ -291,17 +297,16 @@
                                ; (format (current-error-port) "~a~%" l)
                                (if (eof-object? l)
                                  "true"
-                                  (match (fix-string st l)
-                                    (#(state str)
-                                     (if (eqv? state #:no-target)
-                                       "false"
-                                       (begin
-                                         ; (format (current-error-port) "~a~%" str)
-                                         (format t "~a~%" str)
-                                         (lp state (read-line c)))))))))
+                                  (receive (state str) (fix-string st l)
+                                    (if (eq? state #:no-target)
+                                      "false"
+                                      (begin
+                                        ; (format (current-error-port) "~a~%" str)
+                                        (format t "~a~%" str)
+                                        (lp state (read-line c))))))))
                            (handler (string-append "| " cmd) "false"))))
                   (close-port t)
-                  (close-port c)
+                  (close-pipe c)
                   r)))))
 
 ; Правила makenv устроены так, что обычно структура деревьев исходных файлов
@@ -312,55 +317,48 @@
 ; необходимых параметров. Результаты этих процедур необходимо пропускать через
 ; $(eval ...) по месту вызова.
 
-(define (h-route target)
-  (define headline
-    (let ((\ file-name-separator-string))
-      (string-append I \ target \ "%.h: " (nodepath) \ "%.h")))
+(define (h-route-template headline)
+  (lambda ()
+    (format #t "~a~%~/~a~%~/~a~%~/~a~%"
+            headline
+            "@ $(guile (echo-h \"$@\"))"
+            "@ $(guile (ensure-path! \"$(@D)\"))"
+            "@ install -m 755 '$<' '$@'")))
 
-  (with-output-to-string
-    (lambda ()
-      (format #t "~a~%~/~a~%~/~a~%~/~a~%"
-              headline
-              "@ $(guile (echo-h \"$@\"))"
-              "@ $(guile (ensure-path! \"$(@D)\"))"
-              "@ install -m 755 '$<' '$@'"))))
+(define (h-route target)
+  (define headline (string-append (join-path I target "%.h") ": "
+                                  (join-path (nodepath) "%.h")))
+
+  (with-output-to-string (h-route-template headline)))
 
 (define (h-route-subdir target subdir)
-  (define headline
-    (let ((fns file-name-separator-string))
-      (string-append I fns target (if (string-null? target) "" fns) "%.h: "
-                     (nodepath) fns subdir (if (string-null? subdir) "" fns) "%.h")))
+  (define headline (string-append (join-path I target "%.h") ": "
+                                  (join-path (nodepath) subdir "%.h")))
 
-  (with-output-to-string
-    (lambda ()
-      (format #t "~a~%~/~a~%~/~a~%~/~a~%"
-              headline
-              "@ $(guile (echo-h \"$@\"))"
-              "@ $(guile (ensure-path! \"$(@D)\"))"
-              "@ install -m 755 '$<' '$@'"))))
+  (with-output-to-string (h-route-template headline)))
+
+(define (form-headline source ext default)
+  (define (pattern e d) (string-append "%." (if (string-null? e) d e)))
+
+  (let ((pat (pattern ext default)))
+    (string-append (join-path (bitspath) pat) ": "
+                   (join-path source pat))))
 
 (define (tex-route source ext)
-  (define headline
-    (let ((\ file-name-separator-string))
-      (string-append (bitspath) \ "%." ext ": "  source \ "%." ext)))
-
-  (with-output-to-string
-    (lambda ()
-      (format #t "~a~%~/~a~%~/~a~%~/~a~%"
-              headline
-              "@ $(guile (echo-tex/cnv \"$@\"))"
-              "@ $(guile (ensure-path! \"$(@D)\"))"
-              "@ iconv -t $(texcode) < '$<' > '$@'"))))
+  (let ((reroot (lambda (str) (if (absolute-file-name? str) str (join-path root str)))))
+    (with-output-to-string
+      (lambda ()
+        (format #t "~a~%~/~a~%~/~a~%~/~a~%"
+                (form-headline (reroot source) ext "tex")
+                "@ $(guile (echo-tex/cnv \"$@\"))"
+                "@ $(guile (ensure-path! \"$(@D)\"))"
+                "@ iconv -t $(texcode) < '$<' > '$@'")))))
 
 (define (pix-route source ext)
-  (define headline
-    (let ((\ file-name-separator-string))
-      (string-append (bitspath) \ "%." ext ": "  source \ "%." ext)))
-
   (with-output-to-string
     (lambda ()
       (format #t "~a~%~/~a~%~/~a~%~/~a~%"
-              headline
+              (form-headline source ext "png")
               "@ $(guile (echo-pix \"$@\"))"
               "@ $(guile (ensure-path! \"$(@D)\"))"
               "@ cp '$<' '$@'"))))
@@ -370,12 +368,10 @@
 ; Процедура подбирает подходящий toolchain-файл по имени. Поиск сначала в
 ; исходной директории для исходного makefile-а, а затем в базовой директории для
 ; makenv
-
 (define (tcn-path name)
-  (let* ((\ file-name-separator-string)
-         (file-name (string-append name ".mk"))
-         (tcn-root (string-append root \ file-name))
-         (tcn-base (string-append base \ ".." \ "tcn" \ file-name)))
+  (let* ((file-name (string-append name ".mk"))
+         (tcn-root (join-path root file-name))
+         (tcn-base (join-path base ".." "tcn" file-name)))
     (if (access? tcn-root R_OK)
       tcn-root
       (if (access? tcn-base R_OK)
@@ -387,19 +383,14 @@
 ; исходного tex-файла; (2) bib-файлах из списка предпосылок -- аргументе
 ; biberize! Исходный tex-файл -- это первый элемент в этом списке. Изменением
 ; считается изменение контрольной sha-суммы
-
 (define (biberize! prerequisites)
-  (define files (string-split prerequisites #\ ))
+  (define files (string-split prerequisites char-set:whitespace))
   (define path (car files))
-  (define bibs (filter (lambda (f) (equal? "bib" (substring/read-only f (max 0 (- (string-length f) 3)))))
-                       (cdr files)))
+  (define bibs (filter (lambda (f) (string-suffix? ".bib" f)) (cdr files)))
 
-  (define (handler key . args)
-    (format (current-error-port) "~s" (error-string 'biberize! path key args))
-    "false")
-
-  (define (shasum-cmd bcf bibs)
-    (apply string-append "shasum" (map (lambda (f) (format #f " '~a'" f)) (cons bcf bibs))))
+  (define handler (lambda err
+                    (format (current-error-port) "~s" (error-string 'biberize! path err))
+                    "false"))
 
   (let* ((bcf (string-append (drop-ext path) ".bcf"))
          (bcf-sum (string-append bcf ".sum")))
@@ -417,7 +408,7 @@
                               ""
                               (with-input-from-file bcf-sum read)))
                 (new-sums (with-input-from-port
-                            (open-input-pipe (shasum-cmd bcf bibs))
+                            (apply open-pipe* OPEN_READ "shasum" bcf bibs)
                             (lambda ()
                               (let lp ((l (read-line)))
                                 (if (eof-object? l)
@@ -446,3 +437,14 @@
   (with-output-to-string
     (lambda ()
       (for-each (lambda (v) (format #t "undefine ~a~%" v)) combinations))))
+
+(define (std-tex-rules target sources routes)
+  (let* ((bits (bitspath))
+         (t (join-path bits target))
+         (s (string-join (map (lambda (p) (join-path bits p)) sources) " ")))
+    (with-output-to-string
+      (lambda ()
+        ; (format #t "target: ~s~%sources: ~s~%bits: ~s~%" target sources bits)
+        (format #t "~a: ~a~%" t s)
+        (for-each (lambda (p) (format #t "~%~a" (tex-route (car p) (cdr p))))
+                  routes)))))
