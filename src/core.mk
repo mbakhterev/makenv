@@ -38,6 +38,10 @@ L := $(guile L)
 I := $(guile I)
 D := $(guile D)
 
+# Преобразование списка слов make (не выяснил достоверно, что является словами
+# в make) в список строк для guile
+word-list = (list $(foreach w,$(1),"$(w)"))
+
 # О специальных переменных в make:
 #
 #   @  - путь до текущей цели
@@ -211,8 +215,6 @@ ifdef tex
 vars = bib biber tex xtex texcode
 $(guile (check-vars "{Xe}LaTeX group" "$(vars)"))
 
-# $(call checkdefs,$(vars),LaTeX group needs: $(vars))
-
 $(bits)/%.tex: %.tex
 	@ $(guile (echo-tex/cnv "$@"))
 	@ $(guile (ensure-path! "$(@D)"))
@@ -261,4 +263,15 @@ $(D)/%.pdf:
 
 endif # группа правил {Xe}LaTeX
 
-word-list = (list $(foreach w,$(1),"$(w)"))
+# Группа правил преобразований markdown
+
+ifdef md2pdf
+
+$(guile (check-vars "Markdown translation group" "m2pdf"))
+
+$(bits)/%.pdf: %.md
+	@ $(guile (echo-md "$@"))
+	@ $(guile (ensure-path! "$(@D)"))
+	@ $(md2pdf) -o $@ $<
+
+endif # группа правил для преобразований markdown
