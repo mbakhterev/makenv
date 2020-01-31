@@ -72,7 +72,7 @@
                         (set! L (join-path bdir "lib"))
                         (set! I (join-path bdir "include"))
                         (set! T (join-path bdir "tst"))
-                        (set! D (join-path bdir "txt")))
+                        (set! D (join-path bdir "doc")))
                  (throw 'internal "is not accessible (700) directory")))
     handler))
 
