@@ -44,6 +44,7 @@
 ; Переменные для хранения директории, в которой всё собирается.
 (define bdir "")
 (define bdir-items '())
+(define bits "")
 
 ; Плюс набор переменных для часто используемых целевых директорий
 (define B "")
@@ -68,6 +69,7 @@
     (lambda () (if (stat-match? (stat path) 'directory mode-rwx)
                  (begin (set! bdir path)
                         (set! bdir-items (split-path path))
+                        (set! bits (join-path bdir "bits"))
                         (set! B (join-path bdir "bin"))
                         (set! L (join-path bdir "lib"))
                         (set! I (join-path bdir "include"))
@@ -177,7 +179,8 @@
 
 ; Определение пути до текущего файла
 (define (nodepath) (dirname (gmk-expand "$(lastword $(MAKEFILE_LIST))")))
-(define (bitspath) (join-path (gmk-expand "$(bits)") (nodepath)))
+; (define (bitspath) (join-path (gmk-expand "$(bits)") (nodepath)))
+(define (bitspath) (join-path bits (nodepath)))
 
 ; Процедура вывода информации о выполняемом сценарии. Чтобы имитировать
 ; покомандное выполнение рецептов придётся делать в стиле свободной монадки
@@ -199,7 +202,7 @@
 (make-echoes "install"
              "dep" "dep/gen" "dep-c++" "c" "c/gen" "c++" "h" "h/gen"
              "link" "lib"
-             "tex" "xtex" "tex/cnv" "xtex/cp" "biber"
+             "tex" "xtex" "tex/cnv" "xtex/cp" "biber" "bib/cnv"
              "cp" "pix"
              "asm" "elf" "bin" "hex" "o")
 
@@ -344,24 +347,56 @@
     (string-append (join-path (bitspath) pat) ": "
                    (join-path source pat))))
 
-(define (tex-route source ext)
-  (let ((reroot (lambda (str) (if (absolute-file-name? str) str (join-path root str)))))
-    (with-output-to-string
-      (lambda ()
-        (format #t "~a~%~/~a~%~/~a~%~/~a~%"
-                (form-headline (reroot source) ext "tex")
-                "@ $(guile (echo-tex/cnv \"$@\"))"
-                "@ $(guile (ensure-path! \"$(@D)\"))"
-                "@ iconv -t $(texcode) < '$<' > '$@'")))))
+(define reroot (lambda (str) (if (absolute-file-name? str) str (join-path root str))))
 
-(define (pix-route source ext)
+(define (any-route source extensions default-extension route-lambda)
   (with-output-to-string
     (lambda ()
-      (format #t "~a~%~/~a~%~/~a~%~/~a~%"
-              (form-headline source ext "png")
-              "@ $(guile (echo-pix \"$@\"))"
-              "@ $(guile (ensure-path! \"$(@D)\"))"
-              "@ cp '$<' '$@'"))))
+      (for-each route-lambda
+                (if (null? extensions) (list default-extension) extensions)))))
+
+; (define (tex-route source . extensions)
+;   (with-output-to-string
+;     (lambda ()
+;       (for-each (lambda (ext) (format #t "~a~%~/~a~%~/~a~%~/~a~%"
+;                                       (form-headline (reroot source) ext "tex")
+;                                       "@ $(guile (echo-tex/cnv \"$@\"))"
+;                                       "@ $(guile (ensure-path! \"$(@D)\"))"
+;                                       "@ iconv -t $(texcode) < '$<' > '$@'"))
+;                 (if (null? extensions) '("tex") extensions)))))
+
+(define (tex-route source . extensions)
+  (any-route source extensions "tex"
+             (lambda (ext) (format #t "~a~%~/~a~%~/~a~%~/~a~%"
+                                   (form-headline (reroot source) ext "tex")
+                                   "@ $(guile (echo-tex/cnv \"$@\"))"
+                                   "@ $(guile (ensure-path! \"$(@D)\"))"
+                                   "@ iconv -t $(texcode) < '$<' > '$@'"))))
+
+(define (bib-route source . extensions)
+  (any-route source extensions "bib"
+             (lambda (ext) (format #t "~a~%~/~a~%~/~a~%~/~a~%"
+                                   (form-headline (reroot source) ext "tex")
+                                   "@ $(guile (echo-bib/cnv \"$@\"))"
+                                   "@ $(guile (ensure-path! \"$(@D)\"))"
+                                   "@ iconv -t $(texcode) < '$<' > '$@'"))))
+
+; (define (png-route source ext)
+;   (with-output-to-string
+;     (lambda ()
+;       (format #t "~a~%~/~a~%~/~a~%~/~a~%"
+;               (form-headline (reroot source) ext "png")
+;               "@ $(guile (echo-pix \"$@\"))"
+;               "@ $(guile (ensure-path! \"$(@D)\"))"
+;               "@ cp '$<' '$@'"))))
+
+(define (png-route source . extensions)
+  (any-route source extensions "png"
+             (lambda (ext) (format #t "~a~%~/~a~%~/~a~%~/~a~%"
+                                   (form-headline (reroot source) ext "png")
+                                   "@ $(guile (echo-pix \"$@\"))"
+                                   "@ $(guile (ensure-path! \"$(@D)\"))"
+                                   "@ cp '$<' '$@'"))))
 
 (define (tex-log path) (string-append (drop-ext path) ".log"))
 
@@ -438,13 +473,49 @@
     (lambda ()
       (for-each (lambda (v) (format #t "undefine ~a~%" v)) combinations))))
 
-(define (std-tex-rules target sources routes)
-  (let* ((bits (bitspath))
-         (t (join-path bits target))
-         (s (string-join (map (lambda (p) (join-path bits p)) sources) " ")))
-    (with-output-to-string
-      (lambda ()
-        ; (format #t "target: ~s~%sources: ~s~%bits: ~s~%" target sources bits)
-        (format #t "~a: ~a~%" t s)
-        (for-each (lambda (p) (format #t "~%~a" (tex-route (car p) (cdr p))))
-                  routes)))))
+; (define (std-tex-rules target sources routes)
+;   (let* ((bits (bitspath))
+;          (t (join-path bits target))
+;          (s (string-join (map (lambda (p) (join-path bits p)) sources) " ")))
+;     (with-output-to-string
+;       (lambda ()
+;         ; (format #t "target: ~s~%sources: ~s~%bits: ~s~%" target sources bits)
+;         (format #t "~a: ~a~%" t s)
+;         (for-each (lambda (p) (format #t "~%~a" (tex-route (car p) (cdr p))))
+;                   routes)))))
+
+; FIXME: Примитивчик. 
+
+(define (var->list var)
+  ; Некий небезопасный эксперимент. Если cond не доходит до конца, будет
+  ; undefined. Интересно, как это всё себя ведёт 
+
+  (define (stringify v) (cond ((symbol? v) (symbol->string v))
+                              ((string? v) v)))
+
+  (with-input-from-string (gmk-expand (format #f "$(~a)" var))
+                          (lambda ()
+                            (let loop ((s (read))
+                                       (R '()))
+                              (if (eof-object? s)
+                                  (reverse R)
+                                  (let ((v (stringify s)))
+                                    (if (not (string? v))
+                                        '()
+                                        (loop (read) (cons v R)))))))))
+
+; FIXME: Проблема с именами, содержащими пробелы
+
+(define (std-tex-rules var)
+  (let ((bits (bitspath))
+        (sources (var->list var)))
+    (if (null? sources)
+        (format #f "$(error Can not itemize content: $(~a))" var)
+        (let* ((leader (car sources))
+               (name (drop-ext leader)))
+          (if (or (not (string-suffix? ".tex" leader))
+                  (string-null? name))
+              (format #f "$(error The first filename is not valid .tex: ~a)" leader)
+              (let* ((t (join-path bits (string-append name ".pdf")))
+                     (s (map (lambda (p) (join-path bits p)) sources)))
+                (format #f "~a: ~a~%" t (string-join s " "))))))))
