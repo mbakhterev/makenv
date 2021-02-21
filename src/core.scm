@@ -74,7 +74,7 @@
                         (set! L (join-path bdir "lib"))
                         (set! I (join-path bdir "include"))
                         (set! T (join-path bdir "tst"))
-                        (set! D (join-path bdir "doc")))
+                        (set! D (join-path bdir "pdf")))
                  (throw 'internal "is not accessible (700) directory")))
     handler))
 
@@ -398,7 +398,8 @@
                                    "@ $(guile (ensure-path! \"$(@D)\"))"
                                    "@ cp '$<' '$@'"))))
 
-(define (tex-log path) (string-append (drop-ext path) ".log"))
+; (define (tex-log path) (string-append (drop-ext path) ".log"))
+(define (tex-log path) (string-append path ".out"))
 
 ; Процедура подбирает подходящий toolchain-файл по имени. Поиск сначала в
 ; исходной директории для исходного makefile-а, а затем в базовой директории для
