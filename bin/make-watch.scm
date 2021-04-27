@@ -5,7 +5,8 @@
 (use-modules (ice-9 popen)
              (ice-9 rdelim)
              (srfi srfi-41)
-             (common))
+             (common)
+             (options))
 
 (define head car)
 (define tail cdr)
