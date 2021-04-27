@@ -101,8 +101,21 @@
          (else (error "unknown option:" (car arguments))))
        (cdr arguments) options)))
 
-(define defaultize identity)
+(define (default get set unset? v) (lambda (o) (if (unset? (get o))
+                                                   (set o v)
+                                                   o)))
+
+; Тихий ужас. По идее, должно было бы так: (default 'field unset? v). 
+
+(define defaultize
+  (compose (default options:suffixes set-options:suffixes null? '(""))
+           (default options:directories set-options:directories null? '("."))
+           (default options:command set-options:command null? '("make"))
+           (default options:target set-options:target string-null? "/tmp/bdir")
+           (default options:toolchain set-options:toolchain string-null?  "toolchain")))
 
 (define parse-options
-  (let ((unspecified (options '() '() "" "" #f '())))
-    (compose defaultize flags (lambda (arguments) (values arguments unspecified)))))
+  (compose defaultize
+           flags
+           (lambda (arguments) (values arguments
+                                       (options '() '() "" "" #f '())))))

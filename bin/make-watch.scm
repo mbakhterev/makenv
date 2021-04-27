@@ -86,6 +86,6 @@
     (when (not (zero? (pid final)))
       (waitpid (pid final)))))
 
-(let ((opts (collect-options (tail (command-line)))))
+(let ((opts (parse-options (tail (command-line)))))
   (tune-env! opts)
   (main-loop opts (events opts)))
