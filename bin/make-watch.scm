@@ -4,9 +4,114 @@
 
 (use-modules (ice-9 popen)
              (ice-9 rdelim)
+             (srfi srfi-31)
              (srfi srfi-41)
              (common)
              (options))
+
+(define to-read car)
+(define to-write cdr)
+
+(define signal-pipe
+  (let* ((p (pipe))
+         (o (to-write p)))
+    (setvbuf o 'none)
+    (sigaction SIGCHLD
+               (lambda (n) (write-char #\D o))
+               SA_NOCLDSTOP)
+    (to-read p)))
+
+(define (notifications-pipe opts)
+  (apply open-pipe* OPEN_READ (inotify-command opts)))
+
+(define (timeout? t) (and (number? t) (not (negative? t))))
+(define (counter? n) (and (integer? n) (positive? n)))
+
+; Слишком сложный код. Вынести бы отсюда сигналы и select-ы. Это можно сделать,
+; если сразу выдавать из poll. Но проблема в том, что этот цикл по ports тогда
+; просто переедет в selector. Поэтому здесь проще просто выдавать события в виде
+; поток. Тогда не придётся перевызывать процедуру и страдать с каррированием и
+; промежуточными контекстами.
+
+(define (selector timeout . ports)
+  (let ((T (and (timeout? timeout) timeout)))
+    (rec (poll) (catch 'system-error
+                       (lambda () (car (select ports '() '() t)))
+                       (lambda er (if (= EINTR (system-error-errno er))
+                                      (poll)
+                                      (apply throw er)))))))
+
+(define (readable-port? t p) (compose not null? (selector t p))) 
+
+(define (ready-ports . ports)
+  (if (null? ports)
+      stream-null
+      (let ((poll (apply selector #f ports)))
+        (stream-let cycle ((P '()))
+          (if (null? P)
+              (cycle (poll))
+              (stream-cons (car P) (cycle (cdr P))))))))
+
+(define (port-drainer read-proc limit p)
+  (let ((readable? (readable-port? 0.01 p))
+        (next (if (counter? limit) 1- (const 1)))
+        (N (if (counter? limit) limit 1)))
+    (lambda () (let cycle ((n N)
+                           (R '()))
+                 (if (not (and (positive? n) (readable?)))
+                     (values #f R)
+                     (let ((v (read-proc p)))
+                       (if (eof-object? v)
+                           (values #t R)
+                           (loop (next n) (cons v R)))))))))
+
+(define (events opts)
+  (let* ((s signal-pipe)
+         (n (notifications-pipe opts))
+         (s-drain (port-drainer ))
+
+         )
+    (stream-map (lambda (p)
+                  (cond ((equal? p s) (if (eq? #\D (read-char p))
+                                          #:child
+                                          #:unexpected-signal-char))
+                        ((equal? p n) (drain-triggers opts p))
+                        (else #:unknown-port)))
+                (ready-ports s n))))
+
+
+(define ())
+
+(define (events opts)
+  (let* ((s signal-pipe)
+         (n (notifications-pipe opts))
+         (poll (readable 0 s n)))
+    (stream-let cycle ((ports (poll)))
+      (if (null? P)
+          (cycle (poll))
+          (let ((p (car P))
+                (r (cdr P)))
+            (cond ((equal? p s) (let ((c (read-char p)))
+                                  (if (eq? #\D c)
+                                      (stream-cons #:child (cycle r))
+                                      (error "unexpected signal char:" c))))
+                  ((equal? p n) (let ((v (read-line p)))
+                                  (if (eof-object? v)
+                                      (begin (close-pipe p) stream-null)
+                                      (let ((t? (trigger? opts v)))
+                                        (dump-error "~a: ~a~%"
+                                                    v
+                                                    (if t? "triggered" "skipping"))
+                                        (if t?
+                                            (cycle r)
+                                            (cycle r))))))
+                  (else (error "unknown port:" p))))))))
+
+(define (fork-command cmd)
+  (let ((p (primitive-fork)))
+    (if (not (zero? p))
+        p
+        (apply execlp (head cmd) cmd))))
 
 (define head car)
 (define tail cdr)
