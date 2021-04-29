@@ -86,7 +86,7 @@
     (let ((p (primitive-fork)))
       (if (zero? p)
           (begin
-            (setpgid 0 0)
+            ; (setpgid 0 0)
             (apply execlp (car cmd) cmd))
           (begin (dump-error "worker started with PID: ~a~%" p)
                  p)))))
@@ -159,7 +159,9 @@
                                                 (loop R pid rerun?))
                                               (begin 
                                                 (dump-error "interrupting worker with PID: ~a~%" pid)
-                                                (kill (- pid) SIGINT)
+                                                (sigaction SIGINT SIG_IGN)
+                                                (kill (- (getpid)) SIGINT)
+                                                (sigaction SIGINT SIG_DFL)
                                                 (loop R pid #t)))
                                           (loop R (fork-command opts) #f)))
 
@@ -181,43 +183,5 @@
                  (dump-error "unexpected event structure: ~a~%" e)
                  pid)))
        opts e loop R pid rerun?))))
-
-; (define (main-loop opts s)
-;   (let* ((fork-cmd (lambda () (let ((cl (options:command opts))
-;                                     (p (primitive-fork)))
-;                                 (if (not (zero? p)) p (apply execlp (head cl) cl)))))
-;          ; Структура состояния свёртки -- пара (pid есть-неучтённая-работа?)
-;          (pid car)
-;          (job? cdr)
-;          (proc (lambda (st e)
-;                  (case e
-;                    ; Завершился дочерний процесс
-;                    ((#:done) (if (not (= (pid st)
-;                                          (pid (waitpid WAIT_ANY WNOHANG))))
-;                                ; Это не рабочий процесс, менять нечего
-;                                st
-;                                ; Завершился рабочий процесс. Его нужно
-;                                ; повторно запустить, если есть новая работа.
-;                                ; Флаг о наличии работы надо сбросить. Если
-;                                ; работ нет, ничего не запускаем, аннулируем pid
-;                                ; в состоянии
-;                                (cons (if (job? st) (fork-cmd) 0) #f)))
-;                    ((#:triggered) (if (not (zero? (pid st)))
-;                                     ; Не обнаружено завершение рабочего
-;                                     ; процесса, запоминаем что есть работа
-;                                     (cons (pid st) #t)
-;                                     ; Иначе запускаем процесс, отмечая, что
-;                                     ; работы учтены
-;                                     (cons (fork-cmd) #f)))
-;                    (else (error "Unexpected event:" e)))))
-;          (final (stream-fold proc '(0 . #f) s)))
-;     ; Если в конце оказался запущенным некоторый процесс, нужно дождаться его
-;     ; завершения
-;     (when (not (zero? (pid final)))
-;       (waitpid (pid final)))))
-
-; (let ((opts (parse-options (tail (command-line)))))
-;   (tune-env! opts)
-;   (main-loop opts (events opts)))
 
 (main-loop (parse-options (cdr (command-line))))
