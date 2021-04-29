@@ -164,7 +164,7 @@
   (default-signals)
   (let ((p (getpid))) (kill (if (= p (getpgrp)) (- p) p) s)))
  
-(define (child-step opts pid rerun? signals loop)
+(define (child-step opts pid rerun? signals lost? loop)
   (cond
     ; Если наш процесс не завершился, просто продолжаем цикл. 
     ((not (wait-for pid)) (loop pid rerun? signals))
@@ -175,6 +175,10 @@
     ; signals
     ((logbit? SIGTERM signals) (resignal SIGTERM))
     ((logbit? SIGINT signals) (resignal  SIGINT))
+
+    ; Может быть так, что у нас отвалился канал с уведомлениями. В этом случае
+    ; нужно выйти из цикла. Дочерний процесс завершён, можно вернуть 0.
+    (lost? 0)
 
     (else (loop (if rerun? (fork-command opts) 0) #f 0))))
 
@@ -201,7 +205,7 @@
              (loop pid #f (logior signals (ash 1 SIGTERM))))
       (resignal SIGTERM)))
 
-(define (signal-step opts e pid rerun? signals loop)
+(define (signal-step opts e pid rerun? signals lost? loop)
   (let ((V (decode-signals (content e))))
     (if (or (eof? e)
             (not (signals-ok? V)))
@@ -217,7 +221,7 @@
         ; пройти шаги по сигналам. Поэтому, в каждую из процедур передаётся
         ; «прослойка».
         (let* ((after-int (if (logbit? SIGCHLD V)
-                              (lambda (p r? s) (child-step opts p r? s loop))
+                              (lambda (p r? s) (child-step opts p r? s lost? loop))
                               loop))
                (after-term (if (logbit? SIGINT V)
                                (lambda (p r? s) (int-step opts p r? s after-int))
@@ -233,13 +237,14 @@
         #f
         (reverse strings)))
 
-(define (notification-step opts e pid rerun? loop)
+(define (notification-step opts e pid rerun? signals loop)
   (cond
-    ; Так не должно быть. Не возвращаемся в цикл, возвращаем pid на внешний
-    ; уровень обработки
-    ((eof? e)
-     (dump-error "unexpected notification event: ~a~%" e)
-     pid)
+    ; Notification-канал утерян. Сообщаем и сигнализируем об этом. Во всех
+    ; других ветках канал в порядке.
+    ((eof? e) (dump-error "unexpected notification event: ~a~%" e)
+              (if (positive? pid)
+                  (loop pid rerun? #t)
+                  0))
 
     ; То, ради чего всё затевалось. Если файлы обновились, а процесс их
     ; обработки затянулся, надо его прервать. Здесь два варианта развития
@@ -254,22 +259,22 @@
     ; перейдёт во вторую ветку процедуры child-signal-step, где процесс реакции на
     ; обновления будет запущен снова.
     ;
-
     ; Дополнение: если мы уже находимся в процессе перезапуска процесса, то
     ; ничего делать не нужно.
-    ((any-triggers? opts (content e)) (if (positive? pid)
-                                          (if rerun?
-                                              (begin
-                                                (dump-error "interruption in progress. PID: ~a~%" pid)
-                                                (loop R pid rerun?))
-                                              (begin 
-                                                (dump-error "interrupting PID: ~a~%" pid)
-                                                (kill (- pid) SIGINT)
-                                                (loop R pid #t)))
-                                          (loop R (fork-command opts) #f)))
+    ((any-triggers? opts (content e))
+     (if (positive? pid)
+         (if (or rerun? (positive? signals))
+             (begin
+               (dump-error "interruption in progress. PID: ~a~%" pid)
+               (loop pid rerun? #f))
+             (begin 
+               (dump-error "interrupting PID: ~a~%" pid)
+               (kill (- pid) SIGINT)
+               (loop pid #t #f)))
+         (loop (fork-command opts) #f #f)))
 
-    ; Событие нормальное, но нет ничего интересного. Продолжаем цикл
-    (else (loop R pid rerun?))))
+    ; Событие нормальное, но нет ничего интересного. Канал в порядке. Продолжаем
+    (else (loop pid rerun? #f))))
 
 (define (main-loop opts)
   (let* ((n (notifications-pipe opts))
@@ -280,8 +285,10 @@
                (P '())
                (pid 0)
                (rerun? #f)
-               (signals 0))
-      (cond ((null? P) (loop poll (poll) pid rerun? signals))
+               (signals 0)
+               (lost? #f))
+      (gc)
+      (cond ((null? P) (loop poll (poll) pid rerun? signals lost?))
 
             ; Когда срабатывают сигналы, может произойти всякое. Что это всякое
             ; может вернуть?
@@ -299,16 +306,21 @@
                           pid
                           rerun? 
                           signals
-                          (lambda (p r? s) (loop poll (cdr P) p r? s)))) 
+                          lost?
+                          (lambda (p r? s) (loop poll (cdr P) p r? s lost?)))) 
 
+            ; Когда приходит информация об изменениях в fs, то после их
+            ; обработки, может вернуться информация о процессе, о необходимости
+            ; его перезапустить и о потери notification-канала.
             ((equal? n (car P))
-             (notification-step (n-drain)
+             (notification-step opts
+                                (n-drain)
                                 pid
                                 rerun?
-                                (lambda (p r? lost?)
-                                  (if lost?
-                                      (loop (selector #f s) (cdr P) p r? signals)
-                                      (loop poll (cdr P) p r? signals)))))
+                                signals
+                                (lambda (p r? l?)
+                                  (loop (if l? (selector #f s) poll)
+                                        (cdr P) p r? signals l?))))
 
             (else (dump-error "unknown port: ~a~%" (car P))
                   pid)))))
@@ -329,4 +341,7 @@
 ;                  pid)))
 ;        opts e loop R pid rerun?))))
 
-(main-loop (parse-options (cdr (command-line))))
+(let ((p (main-loop (parse-options (cdr (command-line))))))
+  (dump-error "should not be here. PID: ~a~%" p)
+  (when (positive? p) (kill (- p) SIGTERM))
+  (exit 1))
