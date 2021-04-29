@@ -20,9 +20,9 @@
 (define signal-pipe
   (let* ((p (event-pipe))
          (o (to-write p)))
+    (sigaction SIGINT (lambda (n) (write-char #\I o)))
     (sigaction SIGCHLD (lambda (n) (write-char #\D o)) SA_NOCLDSTOP)
-    (sigaction SIGINT SIG_DFL)
-    (sigaction SIGTERM SIG_DFL)
+    (sigaction SIGTERM (lambda (n) (write-char #\T o)))
     (to-read p)))
 
 (define (default-signals)
@@ -112,7 +112,7 @@
 (define eof? cadr)
 (define content cddr)
 
-(define (signal-ok? chars) (every (lambda (c) (char=? #\D c)) chars))
+
 
 (define (wait-for pid)
   (let ((wait (lambda () (false-if-exception (waitpid WAIT_ANY WNOHANG)))))
@@ -121,14 +121,14 @@
         (and (pair? p) (or (= pid (car p))
                            (loop (wait))))))))
 
-(define (signal-step opts e loop R pid rerun?)
+(define (sigchld-step opts loop R pid rerun?)
   (cond
-    ; Так не должно быть. Не возвращаемся в цикл, возвращаем pid на внешний
-    ; уровень обработки
-    ((or (eof? e)
-         (not (signal-ok? (content e)))) 
-     (dump-error "unexpected signal event: ~a~%" e)
-     pid)
+;     ; Так не должно быть. Не возвращаемся в цикл, возвращаем pid на внешний
+;     ; уровень обработки
+;     ((or (eof? e)
+;          (not (signal-ok? (content e)))) 
+;      (dump-error "unexpected signal event: ~a~%" e)
+;      pid)
 
     ; Если задача завершена, нужно проверить, следует ли её перезапустить, и
     ; сделать это в случае необходимости
@@ -138,6 +138,65 @@
 
     ; Сигналы нормальные, но задача не выполнена, продолжаем цикл
     (else (loop R pid rerun?))))
+
+(define (resignal pid s)
+  (dump-error "SIGINT~%")
+  (when (positive? pid) (kill (- pid) s))
+  (default-signals)
+  (kill (let ((p (getpid))) (= p (getpgrp)) (- p) p) s))
+
+(define (sigint-step opts loop R pid rerun?)
+  (resignal pid SIGINT))
+
+(define (sigterm-step opts loop R pid rerun?)
+  (loop R pid rerun?))
+
+; Сигнала с номером 0 не бывает. Поэтому можно использовать эту позицию в
+; битвекторе, как признак неожиданного символа в event-канале от обработчиков
+; сигналов.
+(define decode-signals
+  (let ((S (make-bitvector (+ 1 (max SIGINT SIGTERM SIGCHLD)))))
+    (lambda (e)
+      (bitvector-set! S 0 #f)
+      (bitvector-set! S SIGINT #f)
+      (bitvector-set! S SIGTERM #f)
+      (bitvector-set! S SIGCHLD #f)
+
+      (for-each (lambda (c) (bitvector-set! S
+                                            (case c
+                                              ((#\D) SIGCHLD)
+                                              ((#\T) SIGTERM)
+                                              ((#\I) SIGINT)
+                                              (else 0))
+                                            #t))
+                e)
+      S)))
+
+(define (signals-present? v) (or (bitvector-ref v SIGCHLD)
+                                 (bitvector-ref v SIGINT)
+                                 (bitvector-ref v SIGTERM)))
+
+(define (signals-ok? v) (not (bitvector-ref v 0)))
+
+(define (signal-step opts e loop R pid rerun?)
+  (let ((V (decode-signals (content e))))
+    (if (or (eof? e)
+            (not (signals-ok? V)))
+      (begin (dump-error "unexpected signal event: ~a~%" e)
+             pid)
+      ; Каждая из step-процедур возвращает либо pid, и тогда цикл прерывается,
+      ; либо передаёт в цикл новое состояние из R, pid и rerun?, тогда цикл
+      ; продолжается. Но перед тем, как вернуться в loop, нужно ещё пройти шаги
+      ; по сигналам. Поэтому, в каждую из процедур передаётся «прослойка».
+      (let* ((after-int (if (bitvector-ref V SIGCHLD)
+                            (lambda A (sigchld-step opts loop R pid rerun?))
+                            loop))
+             (after-term (if (bitvector-ref V SIGINT)
+                             (lambda A (sigint-step opts after-int R pid rerun?))
+                             after-int)))
+        (if (bitvector-ref V SIGTERM)
+            (sigterm-step opts after-term R pid rerun?)
+            (after-term R pid rerun?))))))
 
 (define (any-triggers? opts strings)
   (fold (lambda (s result) (let ((t? (trigger? opts s)))
@@ -161,21 +220,22 @@
     ; 1. Процесс не запущен (pid = 0), тогда надо его запустить, со
     ; сброшенным флагом rerun?. Реакция на изменения уже запущена.
     ;
-    ; 2. Процесс запущен (pid > 0), тогда надо прервать его (kill pid SIGINT), и
-    ; продолжить цикл с установленным rerun? Когда дочерний процесс прервётся,
-    ; этому процессу поступит сигнал SIGCHLD и после некоторой обработки
-    ; управление перейдёт во вторую ветку процедуры signal-step, где процесс
-    ; реакции на обновления будет запущен снова.
+    ; 2. Процесс запущен (pid > 0), тогда надо прервать его группу (kill (- pid)
+    ; SIGINT), и продолжить цикл с установленным rerun?. Когда дочерний процесс
+    ; прервётся, поступит сигнал SIGCHLD, и после некоторой обработки управление
+    ; перейдёт во вторую ветку процедуры child-signal-step, где процесс реакции на
+    ; обновления будет запущен снова.
     ;
+
     ; Дополнение: если мы уже находимся в процессе перезапуска процесса, то
     ; ничего делать не нужно.
     ((any-triggers? opts (content e)) (if (positive? pid)
                                           (if rerun?
                                               (begin
-                                                (dump-error "interruption in progress for PID: ~a~%" pid)
+                                                (dump-error "interruption in progress. PID: ~a~%" pid)
                                                 (loop R pid rerun?))
                                               (begin 
-                                                (dump-error "interrupting worker with PID: ~a~%" pid)
+                                                (dump-error "interrupting PID: ~a~%" pid)
                                                 (kill (- pid) SIGINT)
                                                 (loop R pid #t)))
                                           (loop R (fork-command opts) #f)))
@@ -194,7 +254,7 @@
       ((case (kind e)
          ((#:signal) signal-step)
          ((#:notification) notification-step)
-         (else (lambda a 
+         (else (lambda A
                  (dump-error "unexpected event structure: ~a~%" e)
                  pid)))
        opts e loop R pid rerun?))))
