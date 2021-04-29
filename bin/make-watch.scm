@@ -5,6 +5,7 @@
 
 (use-modules (ice-9 popen)
              (ice-9 rdelim)
+             (srfi srfi-1)
              (srfi srfi-11)
              (srfi srfi-31)
              (srfi srfi-41)
@@ -80,11 +81,15 @@
                         (else (cons #:unknown-port (cons p '())))))
                 (ready-ports s n))))
 
-(define (fork-command cmd)
-  (let ((p (primitive-fork)))
-    (if (not (zero? p))
-        p
-        (apply execlp (car cmd) cmd))))
+(define (fork-command opts)
+  (let ((cmd (options:command opts)))
+    (let ((p (primitive-fork)))
+      (if (zero? p)
+          (begin
+            (setpgid 0 0)
+            (apply execlp (car cmd) cmd))
+          (begin (dump-error "worker started with PID: ~a~%" p)
+                 p)))))
 
 (define kind car)
 (define eof? cadr)
@@ -110,17 +115,19 @@
 
     ; Если задача завершена, нужно проверить, следует ли её перезапустить, и
     ; сделать это в случае необходимости
-    ((wait-for pid) (loop R (if rerun? (fork-command opts) 0)) #f)
+    ((wait-for pid)
+     (dump-error "worker with PID finished: ~a~%" pid)
+     (loop R (if rerun? (fork-command opts) 0) #f))
 
     ; Сигналы нормальные, но задача не выполнена, продолжаем цикл
     (else (loop R pid rerun?))))
 
 (define (any-triggers? opts strings)
   (fold (lambda (s result) (let ((t? (trigger? opts s)))
-                             (format "~s ~s~%" (if t? "triggered" "skipping"))
+                             (format #t "~a ~a~%" s (if t? "triggered" "skipping"))
                              (if t? #t result)))
         #f
-        strings))
+        (reverse strings)))
 
 (define (notification-step opts e loop R pid rerun?)
   (cond
@@ -130,13 +137,31 @@
      (dump-error "unexpected notification event: ~a~%" e)
      pid)
 
-    ; То, ради чего всё затевалось. Если изменились интересные файлы, надо
-    ; прервать текущий процесс обработки. Он может быть долгим, и
-    ; тратить время на ожидание не хочется, так как его результат уже не будет
-    ; актуальными.
+    ; То, ради чего всё затевалось. Если файлы обновились, а процесс их
+    ; обработки затянулся, надо его прервать. Здесь два варианта развития
+    ; событий.
     ;
-    ; Алгоритм прерывания: если процесс запущен. FIXME: Не завершено
-    ((any-triggers? opts (content e)) pid)
+    ; 1. Процесс не запущен (pid = 0), тогда надо его запустить, со
+    ; сброшенным флагом rerun?. Реакция на изменения уже запущена.
+    ;
+    ; 2. Процесс запущен (pid > 0), тогда надо прервать его (kill pid SIGINT), и
+    ; продолжить цикл с установленным rerun? Когда дочерний процесс прервётся,
+    ; этому процессу поступит сигнал SIGCHLD и после некоторой обработки
+    ; управление перейдёт во вторую ветку процедуры signal-step, где процесс
+    ; реакции на обновления будет запущен снова.
+    ;
+    ; Дополнение: если мы уже находимся в процессе перезапуска процесса, то
+    ; ничего делать не нужно.
+    ((any-triggers? opts (content e)) (if (positive? pid)
+                                          (if rerun?
+                                              (begin
+                                                (dump-error "interrupting in progress for PID: ~a~%" pid)
+                                                (loop R pid rerun?))
+                                              (begin 
+                                                (dump-error "interrupting worker with PID: ~a~%" pid)
+                                                (kill (- pid) SIGINT)
+                                                (loop R pid #t)))
+                                          (loop R (fork-command opts) #f)))
 
     ; Событие нормальное, но нет ничего интересного. Продолжаем цикл
     (else (loop R pid rerun?))))
@@ -155,8 +180,7 @@
          (else (lambda a 
                  (dump-error "unexpected event structure: ~a~%" e)
                  pid)))
-       opts e loop R pid rerun?)))
-  )
+       opts e loop R pid rerun?))))
 
 ; (define (main-loop opts s)
 ;   (let* ((fork-cmd (lambda () (let ((cl (options:command opts))
