@@ -86,18 +86,35 @@
         p
         (apply execlp (car cmd) cmd))))
 
+(define kind car)
+(define eof? cadr)
+(define content cddr)
+
+(define (signal-ok? chars) (every (lambda (c) (char=? #\D c)) chars))
+
+(define (wait-all pid)
+  (let ((wait-any (lambda () (false-if-exception (waitpid WAIT_ANY WNOHANG)))))
+    (let loop ((p (wait-any)))
+      (and (pair? p) (or (= pid (car p))
+                         (loop (wait-any)))))))
 
 (define (main-loop opts)
   (let loop ((E (events opts))
              (pid 0)
              (rerun? #f))
-    (let* ((e (stream-car E))
-           (k (car e))
-           (eof? (cadr e))
-           (V (cddr e)))
+    (let ((e (stream-car E)))
+      (case (kind e)
+        ((#:done) (if (and (not (eof? e))
+                           (signal-ok? (content e)))
+                      
+                      ))
+        )
       (display e)
       (newline)
-      (loop (stream-cdr E) pid rerun?))))
+      (loop (stream-cdr E) pid rerun?)))
+
+
+  )
 
 ; (define (main-loop opts s)
 ;   (let* ((fork-cmd (lambda () (let ((cl (options:command opts))
