@@ -73,7 +73,7 @@
          (s-drain (drainer s read-char 32 0))
          (n-drain (drainer n read-line 32 0.1)))
     (stream-map (lambda (p)
-                  (cond ((equal? p s) (cons #:child
+                  (cond ((equal? p s) (cons #:signal
                                             (call-with-values s-drain cons)))
                         ((equal? p n) (cons #:notification
                                             (call-with-values n-drain cons)))
@@ -99,6 +99,48 @@
         (and (pair? p) (or (= pid (car p))
                            (loop (wait))))))))
 
+(define (signal-step opts e loop R pid rerun?)
+  (cond
+    ; Так не должно быть. Не возвращаемся в цикл, возвращаем pid на внешний
+    ; уровень обработки
+    ((or (eof? e)
+         (not (signal-ok? (content e)))) 
+     (dump-error "unexpected signal event: ~a~%" e)
+     pid)
+
+    ; Если задача завершена, нужно проверить, следует ли её перезапустить, и
+    ; сделать это в случае необходимости
+    ((wait-for pid) (loop R (if rerun? (fork-command opts) 0)) #f)
+
+    ; Сигналы нормальные, но задача не выполнена, продолжаем цикл
+    (else (loop R pid rerun?))))
+
+(define (any-triggers? opts strings)
+  (fold (lambda (s result) (let ((t? (trigger? opts s)))
+                             (format "~s ~s~%" (if t? "triggered" "skipping"))
+                             (if t? #t result)))
+        #f
+        strings))
+
+(define (notification-step opts e loop R pid rerun?)
+  (cond
+    ; Так не должно быть. Не возвращаемся в цикл, возвращаем pid на внешний
+    ; уровень обработки
+    ((eof? e)
+     (dump-error "unexpected notification event: ~a~%" e)
+     pid)
+
+    ; То, ради чего всё затевалось. Если изменились интересные файлы, надо
+    ; прервать текущий процесс обработки. Он может быть долгим, и
+    ; тратить время на ожидание не хочется, так как его результат уже не будет
+    ; актуальными.
+    ;
+    ; Алгоритм прерывания: если процесс запущен. FIXME: Не завершено
+    ((any-triggers? opts (content e)) pid)
+
+    ; Событие нормальное, но нет ничего интересного. Продолжаем цикл
+    (else (loop R pid rerun?))))
+
 (define (main-loop opts)
   (let loop ((E (events opts))
              (pid 0)
@@ -107,24 +149,13 @@
     ; остаток потока.
     (let ((e (stream-car E))
           (R (stream-cdr E)))
-      (case (kind e)
-        ((#:done) (if (and (not (eof? e))
-                           (signal-ok? (content e)))
-                      ; Если информация штатная, всё хорошо.
-                      (if (not (wait-for pid))
-                          ; Задача завершена. 
-                          (if rerun?
-                              ; Если нужен перезапуск, делаем это. 
-                              (loop R (fork-command opts) #f)
-
-                              ; Перезапуск не нужен
-                              (loop R 0 #f))
-
-                          ; Задача не выполнена, продолжаем без изменений
-                          (loop R pid rerun?))
-                      
-                      ; Эта ветка исполняется, когда 
-                      )))))
+      ((case (kind e)
+         ((#:signal) signal-step)
+         ((#:notification) notification-step)
+         (else (lambda a 
+                 (dump-error "unexpected event structure: ~a~%" e)
+                 pid)))
+       opts e loop R pid rerun?)))
   )
 
 ; (define (main-loop opts s)
