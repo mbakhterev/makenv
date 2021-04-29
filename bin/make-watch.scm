@@ -20,13 +20,11 @@
 
 (define (event-pipe) (let ((p (pipe))) (setvbuf (to-write p) 'none) p))
 
-(define signal-pipe
-  (let* ((p (event-pipe))
-         (o (to-write p)))
-    (sigaction SIGINT (lambda (n) (write-char #\I o)))
-    (sigaction SIGCHLD (lambda (n) (write-char #\D o)) SA_NOCLDSTOP)
-    (sigaction SIGTERM (lambda (n) (write-char #\T o)))
-    (to-read p)))
+(define (pipe? p) (and (pair? p)
+                       (input-pipe? (to-read p))
+                       (output-pipe? (to-write p))))
+
+
 
 (define (default-signals)
   (for-each
@@ -42,6 +40,76 @@
 
 (define (timeout? t) (and (number? t) (not (negative? t))))
 (define (counter? n) (and (integer? n) (positive? n)))
+
+(define (fork-command opts)
+  (let* ((P (event-pipe))
+	 ((R W) (let ((p (event-pipe))) (values (to-read p) (to-write p)))))
+    (let ((cmd (options:command opts))
+	  (p (primitive-fork)))
+      (if (zero? p)
+	  (begin
+	    (default-signals)
+	    (close-output-port W)
+	    (unless (char=? #\G (read-char R)) (exit 1))
+	    (clear-ports)
+	    (dump-error "worker is clean to go. PID: ~a~%" (getpid))
+	    (apply execlp (car cmd) cmd))
+	  (begin 
+	    (close-input-port R)
+	    (setpgid p p)
+	    (write-char #\G W)
+	    (close-output-port W)
+	    p)))))
+
+(define (wait-for pid)
+  (let ((wait (lambda () (false-if-exception (waitpid WAIT_ANY WNOHANG)))))
+    (lambda (pid)
+      (let loop ((p (wait)))
+        (and (pair? p) (or (= pid (car p))
+                           (loop (wait))))))))
+
+; Semistable pices of code
+
+; FIXME: Code is not threading friendly.
+(define signal-pipe
+  (let ((p #f))
+    (lambda ()
+      (if (pipe? p)
+          (to-read p)
+          (begin
+            (set! p (event-pipe))
+            (let ((o (to-write p)))
+              (sigaction SIGINT (lambda (n) (write-char #\I o)))
+              (sigaction SIGCHLD (lambda (n) (write-char #\D o)) SA_NOCLDSTOP)
+              (sigaction SIGTERM (lambda (n) (write-char #\T o)))
+              (to-read p)))))))
+
+; Сигнала с номером 0 не бывает. Поэтому можно использовать эту позицию в
+; битвекторе, как признак неожиданного символа в event-канале от обработчиков
+; сигналов.
+
+(define decode-signals
+  (let ((S (make-bitvector (+ 1 (max SIGINT SIGTERM SIGCHLD))))
+        (signum (lambda (c) (case c
+                              ((#\D) SIGCHLD)
+                              ((#\T) SIGTERM)
+                              ((#\I) SIGINT)
+                              (else 0)))))
+    (lambda (E)
+      (bitvector-set! S 0 #f)
+      (bitvector-set! S SIGINT #f)
+      (bitvector-set! S SIGTERM #f)
+      (bitvector-set! S SIGCHLD #f)
+      (for-each (lambda (c) (bitvector-set! S (signum c) #t)) E)
+      S)))
+
+(define (signals-present? v) (or (bitvector-ref v SIGCHLD)
+                                 (bitvector-ref v SIGINT)
+                                 (bitvector-ref v SIGTERM)))
+
+(define (signals-ok? v) (not (bitvector-ref v 0))) 
+
+; Unstable pieces of soft
 
 (define (selector timeout . ports)
   (let ((T (and (timeout? timeout) timeout)))
@@ -88,53 +156,20 @@
                         (else (cons #:unknown-port (cons p '())))))
                 (ready-ports s n))))
 
+; (define kind car)
+; (define eof? cadr)
+; (define content cddr)
 
-(define (fork-command opts)
-  (let-values (((R W) (let ((p (event-pipe))) (values (to-read p) (to-write p)))))
-    (let ((cmd (options:command opts))
-          (p (primitive-fork)))
-      (if (zero? p)
-          (begin
-            (default-signals)
-            (close-output-port W)
-            (unless (char=? #\G (read-char R)) (exit 1))
-            (clear-ports)
-            (dump-error "worker is clean to go. PID: ~a~%" (getpid))
-            (apply execlp (car cmd) cmd))
-          (begin 
-            (close-input-port R)
-            (setpgid p p)
-            (write-char #\G W)
-            (close-output-port W)
-            p)))))
-
-(define kind car)
-(define eof? cadr)
-(define content cddr)
-
-
-
-(define (wait-for pid)
-  (let ((wait (lambda () (false-if-exception (waitpid WAIT_ANY WNOHANG)))))
-    (lambda (pid)
-      (let loop ((p (wait)))
-        (and (pair? p) (or (= pid (car p))
-                           (loop (wait))))))))
-
-(define (sigchld-step opts loop R pid rerun?)
+(define eof? car)
+(define content cdr)
+ 
+(define (child-step opts loop pid rerun?)
   (cond
-;     ; Так не должно быть. Не возвращаемся в цикл, возвращаем pid на внешний
-;     ; уровень обработки
-;     ((or (eof? e)
-;          (not (signal-ok? (content e)))) 
-;      (dump-error "unexpected signal event: ~a~%" e)
-;      pid)
-
     ; Если задача завершена, нужно проверить, следует ли её перезапустить, и
     ; сделать это в случае необходимости
     ((wait-for pid)
      (dump-error "worker with PID finished: ~a~%" pid)
-     (loop R (if rerun? (fork-command opts) 0) #f))
+     (loop (if rerun? (fork-command opts) 0)))
 
     ; Сигналы нормальные, но задача не выполнена, продолжаем цикл
     (else (loop R pid rerun?))))
@@ -151,41 +186,14 @@
 (define (sigterm-step opts loop R pid rerun?)
   (loop R pid rerun?))
 
-; Сигнала с номером 0 не бывает. Поэтому можно использовать эту позицию в
-; битвекторе, как признак неожиданного символа в event-канале от обработчиков
-; сигналов.
-(define decode-signals
-  (let ((S (make-bitvector (+ 1 (max SIGINT SIGTERM SIGCHLD)))))
-    (lambda (e)
-      (bitvector-set! S 0 #f)
-      (bitvector-set! S SIGINT #f)
-      (bitvector-set! S SIGTERM #f)
-      (bitvector-set! S SIGCHLD #f)
-
-      (for-each (lambda (c) (bitvector-set! S
-                                            (case c
-                                              ((#\D) SIGCHLD)
-                                              ((#\T) SIGTERM)
-                                              ((#\I) SIGINT)
-                                              (else 0))
-                                            #t))
-                e)
-      S)))
-
-(define (signals-present? v) (or (bitvector-ref v SIGCHLD)
-                                 (bitvector-ref v SIGINT)
-                                 (bitvector-ref v SIGTERM)))
-
-(define (signals-ok? v) (not (bitvector-ref v 0)))
-
-(define (signal-step opts e loop R pid rerun?)
+(define (signal-step opts e R pid rerun? loop)
   (let ((V (decode-signals (content e))))
     (if (or (eof? e)
             (not (signals-ok? V)))
       (begin (dump-error "unexpected signal event: ~a~%" e)
              pid)
       ; Каждая из step-процедур возвращает либо pid, и тогда цикл прерывается,
-      ; либо передаёт в цикл новое состояние из R, pid и rerun?, тогда цикл
+      ; либо передаёт в цикл новое состояние из pid и rerun?, тогда цикл
       ; продолжается. Но перед тем, как вернуться в loop, нужно ещё пройти шаги
       ; по сигналам. Поэтому, в каждую из процедур передаётся «прослойка».
       (let* ((after-int (if (bitvector-ref V SIGCHLD)
@@ -244,6 +252,35 @@
     (else (loop R pid rerun?))))
 
 (define (main-loop opts)
+  (let* ((n (notifications-pipe opts))
+         (s (signal-pipe))
+         (s-drain (drainer s read-char 32 0))
+         (n-drain (drainer n read-line 32 0.1)))
+    (let loop ((poll (selector #f s n))
+               (P '())
+               (pid 0)
+               (rerun? #f))
+      (cond ((null? P) (loop poll (poll) pid rerun?))
+            ; Когда срабатывают сигналы, может произойти всякое.
+            ((equal? s (car P))
+             (signal-step (s-drain)
+                          pid
+                          rerun? 
+                          (lambda (p r?) (loop poll (cdr P) p #f)))) 
+
+            ((equal? n (car P))
+             (notification-step (n-drain)
+                                pid
+                                rerun?
+                                (lambda (p r? lost?)
+                                  (if lost?
+                                      (loop (selector #f s) (cdr P) p r?)
+                                      (loop poll (cdr P) p r?)))))
+
+            (else (dump-error "unknown port: ~a~%" (car P))
+                  pid)))))
+
+(define (main-loop-old opts)
   (let loop ((E (events opts))
              (pid 0)
              (rerun? #f))
