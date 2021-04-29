@@ -15,6 +15,9 @@
 (define to-read car)
 (define to-write cdr)
 
+(define (notifications-pipe opts)
+  (apply open-pipe* OPEN_READ (inotify-command opts)))
+
 (define (event-pipe) (let ((p (pipe))) (setvbuf (to-write p) 'none) p))
 
 (define signal-pipe
@@ -36,9 +39,6 @@
       (let ((fd (false-if-exception (port->fdes p))))
         (when (and (integer? fd) (< 2 fd))
           (close-port p))))))
-
-(define (notifications-pipe opts)
-  (apply open-pipe* OPEN_READ (inotify-command opts)))
 
 (define (timeout? t) (and (number? t) (not (negative? t))))
 (define (counter? n) (and (integer? n) (positive? n)))
