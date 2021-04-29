@@ -92,28 +92,39 @@
 
 (define (signal-ok? chars) (every (lambda (c) (char=? #\D c)) chars))
 
-(define (wait-all pid)
-  (let ((wait-any (lambda () (false-if-exception (waitpid WAIT_ANY WNOHANG)))))
-    (let loop ((p (wait-any)))
-      (and (pair? p) (or (= pid (car p))
-                         (loop (wait-any)))))))
+(define (wait-for pid)
+  (let ((wait (lambda () (false-if-exception (waitpid WAIT_ANY WNOHANG)))))
+    (lambda (pid)
+      (let loop ((p (wait)))
+        (and (pair? p) (or (= pid (car p))
+                           (loop (wait))))))))
 
 (define (main-loop opts)
   (let loop ((E (events opts))
              (pid 0)
              (rerun? #f))
-    (let ((e (stream-car E)))
+    ; Следующий элемент потока вычисляется в (stream-car E). R -- это ссылка на
+    ; остаток потока.
+    (let ((e (stream-car E))
+          (R (stream-cdr E)))
       (case (kind e)
         ((#:done) (if (and (not (eof? e))
                            (signal-ok? (content e)))
+                      ; Если информация штатная, всё хорошо.
+                      (if (not (wait-for pid))
+                          ; Задача завершена. 
+                          (if rerun?
+                              ; Если нужен перезапуск, делаем это. 
+                              (loop R (fork-command opts) #f)
+
+                              ; Перезапуск не нужен
+                              (loop R 0 #f))
+
+                          ; Задача не выполнена, продолжаем без изменений
+                          (loop R pid rerun?))
                       
-                      ))
-        )
-      (display e)
-      (newline)
-      (loop (stream-cdr E) pid rerun?)))
-
-
+                      ; Эта ветка исполняется, когда 
+                      )))))
   )
 
 ; (define (main-loop opts s)
