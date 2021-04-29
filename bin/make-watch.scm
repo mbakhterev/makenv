@@ -12,6 +12,8 @@
              (common)
              (options))
 
+; Quite stable code
+
 (define to-read car)
 (define to-write cdr)
 
@@ -21,10 +23,8 @@
 (define (event-pipe) (let ((p (pipe))) (setvbuf (to-write p) 'none) p))
 
 (define (pipe? p) (and (pair? p)
-                       (input-pipe? (to-read p))
-                       (output-pipe? (to-write p))))
-
-
+                       (input-port? (to-read p))
+                       (output-port? (to-write p))))
 
 (define (default-signals)
   (for-each
@@ -43,23 +43,24 @@
 
 (define (fork-command opts)
   (let* ((P (event-pipe))
-	 ((R W) (let ((p (event-pipe))) (values (to-read p) (to-write p)))))
-    (let ((cmd (options:command opts))
-	  (p (primitive-fork)))
-      (if (zero? p)
-	  (begin
-	    (default-signals)
-	    (close-output-port W)
-	    (unless (char=? #\G (read-char R)) (exit 1))
-	    (clear-ports)
-	    (dump-error "worker is clean to go. PID: ~a~%" (getpid))
-	    (apply execlp (car cmd) cmd))
-	  (begin 
-	    (close-input-port R)
-	    (setpgid p p)
-	    (write-char #\G W)
-	    (close-output-port W)
-	    p)))))
+         (R (to-read P))
+         (W (to-write P))
+         (cmd (options:command opts))
+         (p (primitive-fork)))
+    (if (zero? p)
+        (begin
+          (default-signals)
+          (close-output-port W)
+          (unless (char=? #\G (read-char R)) (exit 1))
+          (clear-ports)
+          (dump-error "worker is clean to go. PID: ~a~%" (getpid))
+          (apply execlp (car cmd) cmd))
+        (begin 
+          (close-input-port R)
+          (setpgid p p)
+          (write-char #\G W)
+          (close-output-port W)
+          p))))
 
 (define (wait-for pid)
   (let ((wait (lambda () (false-if-exception (waitpid WAIT_ANY WNOHANG)))))
@@ -68,9 +69,22 @@
         (and (pair? p) (or (= pid (car p))
                            (loop (wait))))))))
 
+(define decode-signals
+  (let ((signum (lambda (c) (case c
+                              ((#\D) SIGCHLD)
+                              ((#\T) SIGTERM)
+                              ((#\I) SIGINT)
+                              (else 0)))))
+    (lambda (E)
+      (fold (lambda (c R) (logior R (ash 1 (signum c))))
+            0
+            E))))
+
+(define (signals-ok? v) (and (not (logbit? 0 v)) (positive? v)))
+
 ; Semistable pices of code
 
-; FIXME: Code is not threading friendly.
+; FIXME: Code is not thread friendly.
 (define signal-pipe
   (let ((p #f))
     (lambda ()
@@ -88,28 +102,11 @@
 ; битвекторе, как признак неожиданного символа в event-канале от обработчиков
 ; сигналов.
 
-(define decode-signals
-  (let ((S (make-bitvector (+ 1 (max SIGINT SIGTERM SIGCHLD))))
-        (signum (lambda (c) (case c
-                              ((#\D) SIGCHLD)
-                              ((#\T) SIGTERM)
-                              ((#\I) SIGINT)
-                              (else 0)))))
-    (lambda (E)
-      (bitvector-set! S 0 #f)
-      (bitvector-set! S SIGINT #f)
-      (bitvector-set! S SIGTERM #f)
-      (bitvector-set! S SIGCHLD #f)
-      (for-each (lambda (c) (bitvector-set! S (signum c) #t)) E)
-      S)))
-
 (define (signals-present? v) (or (bitvector-ref v SIGCHLD)
                                  (bitvector-ref v SIGINT)
                                  (bitvector-ref v SIGTERM)))
 
-(define (signals-ok? v) (not (bitvector-ref v 0))) 
-
-; Unstable pieces of soft
+; Unstable code
 
 (define (selector timeout . ports)
   (let ((T (and (timeout? timeout) timeout)))
@@ -137,10 +134,10 @@
     (lambda () (let loop ((n N)
                           (R '()))
                  (if (not (and (positive? n) (readable?)))
-                     (values #f R)
+                     (cons #f R)
                      (let ((v (read-proc p)))
                        (if (eof-object? v)
-                           (values #t R)
+                           (cons #t R)
                            (loop (next n) (cons v R)))))))))
 
 (define (events opts)
@@ -162,49 +159,72 @@
 
 (define eof? car)
 (define content cdr)
- 
-(define (child-step opts loop pid rerun?)
-  (cond
-    ; Если задача завершена, нужно проверить, следует ли её перезапустить, и
-    ; сделать это в случае необходимости
-    ((wait-for pid)
-     (dump-error "worker with PID finished: ~a~%" pid)
-     (loop (if rerun? (fork-command opts) 0)))
 
-    ; Сигналы нормальные, но задача не выполнена, продолжаем цикл
-    (else (loop R pid rerun?))))
-
-(define (resignal pid s)
-  (dump-error "SIGINT~%")
-  (when (positive? pid) (kill (- pid) s))
+(define (resignal s)
   (default-signals)
-  (kill (let ((p (getpid))) (= p (getpgrp)) (- p) p) s))
+  (let ((p (getpid))) (kill (if (= p (getpgrp)) (- p) p) s)))
+ 
+(define (child-step opts pid rerun? signals loop)
+  (cond
+    ; Если наш процесс не завершился, просто продолжаем цикл. 
+    ((not (wait-for pid)) (loop pid rerun? signals))
 
-(define (sigint-step opts loop R pid rerun?)
-  (resignal pid SIGINT))
+    ; Если процесс завершился, потому что его остановили по сигналу в signals,
+    ; то мы должны теперь сами себя остановить одним из этих сигналов. Приоритет
+    ; отдаём SIGTERM, если был. Причина остановки по сигналу отмечается в
+    ; signals
+    ((logbit? SIGTERM signals) (resignal SIGTERM))
+    ((logbit? SIGINT signals) (resignal  SIGINT))
 
-(define (sigterm-step opts loop R pid rerun?)
-  (loop R pid rerun?))
+    (else (loop (if rerun? (fork-command opts) 0) #f 0))))
 
-(define (signal-step opts e R pid rerun? loop)
+; (define (resignal pid s)
+;   (dump-error "SIGINT~%")
+;   (when (positive? pid) (kill (- pid) s))
+;   (default-signals)
+;   (kill (let ((p (getpid))) (= p (getpgrp)) (- p) p) s))
+
+(define (int-step opts pid rerun? signals loop)
+  (dump-error "SIGINT~%")
+  ; Если дочерний процесс запущен, надо отправить ему прерывающий сигнал, а
+  ; потом дождаться, когда он будет завершён в child-step. Иначе, можно
+  ; завершиться
+  (if (positive? pid)
+      (begin (kill (- pid) SIGINT)
+             (loop pid #f (logior signals (ash 1 SIGINT))))
+      (resignal SIGINT)))
+
+(define (term-step opts pid rerun? signals loop)
+  (dump-error "SIGTERM~%")
+  (if (positive? pid)
+      (begin (kill (- pid) SIGTERM)
+             (loop pid #f (logior signals (ash 1 SIGTERM))))
+      (resignal SIGTERM)))
+
+(define (signal-step opts e pid rerun? signals loop)
   (let ((V (decode-signals (content e))))
     (if (or (eof? e)
             (not (signals-ok? V)))
-      (begin (dump-error "unexpected signal event: ~a~%" e)
-             pid)
-      ; Каждая из step-процедур возвращает либо pid, и тогда цикл прерывается,
-      ; либо передаёт в цикл новое состояние из pid и rerun?, тогда цикл
-      ; продолжается. Но перед тем, как вернуться в loop, нужно ещё пройти шаги
-      ; по сигналам. Поэтому, в каждую из процедур передаётся «прослойка».
-      (let* ((after-int (if (bitvector-ref V SIGCHLD)
-                            (lambda A (sigchld-step opts loop R pid rerun?))
-                            loop))
-             (after-term (if (bitvector-ref V SIGINT)
-                             (lambda A (sigint-step opts after-int R pid rerun?))
-                             after-int)))
-        (if (bitvector-ref V SIGTERM)
-            (sigterm-step opts after-term R pid rerun?)
-            (after-term R pid rerun?))))))
+        ; Если сломался канал с сигналами по какой-то причине, то ничего толком
+        ; сделать уже нельзя. Сообщаем об этом и отдаём pid на внешний уровень
+        ; обработки
+        (begin (dump-error "unexpected signal event: ~a~%" e)
+               pid)
+
+        ; Каждая из step-процедур возвращает либо pid, и тогда цикл прерывается,
+        ; либо передаёт в цикл новое состояние из pid, rerun? и signals, тогда
+        ; цикл продолжается. Но перед тем, как вернуться в loop, нужно ещё
+        ; пройти шаги по сигналам. Поэтому, в каждую из процедур передаётся
+        ; «прослойка».
+        (let* ((after-int (if (logbit? SIGCHLD V)
+                              (lambda (p r? s) (child-step opts p r? s loop))
+                              loop))
+               (after-term (if (logbit? SIGINT V)
+                               (lambda (p r? s) (int-step opts p r? s after-int))
+                               after-int)))
+          (if (logbit? SIGTERM V)
+              (term-step opts pid rerun? signals loop)
+              (after-term pid rerun? signals))))))
 
 (define (any-triggers? opts strings)
   (fold (lambda (s result) (let ((t? (trigger? opts s)))
@@ -213,7 +233,7 @@
         #f
         (reverse strings)))
 
-(define (notification-step opts e loop R pid rerun?)
+(define (notification-step opts e pid rerun? loop)
   (cond
     ; Так не должно быть. Не возвращаемся в цикл, возвращаем pid на внешний
     ; уровень обработки
@@ -259,14 +279,27 @@
     (let loop ((poll (selector #f s n))
                (P '())
                (pid 0)
-               (rerun? #f))
-      (cond ((null? P) (loop poll (poll) pid rerun?))
-            ; Когда срабатывают сигналы, может произойти всякое.
+               (rerun? #f)
+               (signals 0))
+      (cond ((null? P) (loop poll (poll) pid rerun? signals))
+
+            ; Когда срабатывают сигналы, может произойти всякое. Что это всякое
+            ; может вернуть?
+            ;
+            ; 1. Может вернуться pid и rerun? на ветке child-step. Там может
+            ; быть снова запущен или не запущен worker.
+            ;
+            ; 2. Могут вернуться биты, описывающие зарегистрированные сигналы
+            ; остановки. Зачем нам эти биты? Чтобы аккуратно дождаться
+            ; завершения дочернего процесса, а потом снова вызвать указанные
+            ; сигналы. Эти данные потекут в child-step. Ну, хорошо.
             ((equal? s (car P))
-             (signal-step (s-drain)
+             (signal-step opts
+                          (s-drain)
                           pid
                           rerun? 
-                          (lambda (p r?) (loop poll (cdr P) p #f)))) 
+                          signals
+                          (lambda (p r? s) (loop poll (cdr P) p r? s)))) 
 
             ((equal? n (car P))
              (notification-step (n-drain)
@@ -274,26 +307,26 @@
                                 rerun?
                                 (lambda (p r? lost?)
                                   (if lost?
-                                      (loop (selector #f s) (cdr P) p r?)
-                                      (loop poll (cdr P) p r?)))))
+                                      (loop (selector #f s) (cdr P) p r? signals)
+                                      (loop poll (cdr P) p r? signals)))))
 
             (else (dump-error "unknown port: ~a~%" (car P))
                   pid)))))
 
-(define (main-loop-old opts)
-  (let loop ((E (events opts))
-             (pid 0)
-             (rerun? #f))
-    ; Следующий элемент потока вычисляется в (stream-car E). R -- это ссылка на
-    ; остаток потока.
-    (let ((e (stream-car E))
-          (R (stream-cdr E)))
-      ((case (kind e)
-         ((#:signal) signal-step)
-         ((#:notification) notification-step)
-         (else (lambda A
-                 (dump-error "unexpected event structure: ~a~%" e)
-                 pid)))
-       opts e loop R pid rerun?))))
+; (define (main-loop-old opts)
+;   (let loop ((E (events opts))
+;              (pid 0)
+;              (rerun? #f))
+;     ; Следующий элемент потока вычисляется в (stream-car E). R -- это ссылка на
+;     ; остаток потока.
+;     (let ((e (stream-car E))
+;           (R (stream-cdr E)))
+;       ((case (kind e)
+;          ((#:signal) signal-step)
+;          ((#:notification) notification-step)
+;          (else (lambda A
+;                  (dump-error "unexpected event structure: ~a~%" e)
+;                  pid)))
+;        opts e loop R pid rerun?))))
 
 (main-loop (parse-options (cdr (command-line))))
