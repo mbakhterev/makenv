@@ -15,26 +15,33 @@
 (define to-read car)
 (define to-write cdr)
 
+(define (event-pipe) (let ((p (pipe))) (setvbuf (to-write p) 'none) p))
+
 (define signal-pipe
-  (let* ((p (pipe))
+  (let* ((p (event-pipe))
          (o (to-write p)))
-    (setvbuf o 'none)
-    (sigaction SIGCHLD
-               (lambda (n) (write-char #\D o))
-               SA_NOCLDSTOP)
+    (sigaction SIGCHLD (lambda (n) (write-char #\D o)) SA_NOCLDSTOP)
+    (sigaction SIGINT SIG_DFL)
+    (sigaction SIGTERM SIG_DFL)
     (to-read p)))
+
+(define (default-signals)
+  (for-each
+    (lambda (s) (sigaction s SIG_DFL))
+    (list SIGINT SIGTERM SIGCHLD)))
+
+(define (clear-ports)
+  (port-for-each
+    (lambda (p)
+      (let ((fd (false-if-exception (port->fdes p))))
+        (when (and (integer? fd) (< 2 fd))
+          (close-port p))))))
 
 (define (notifications-pipe opts)
   (apply open-pipe* OPEN_READ (inotify-command opts)))
 
 (define (timeout? t) (and (number? t) (not (negative? t))))
 (define (counter? n) (and (integer? n) (positive? n)))
-
-; Слишком сложный код. Вынести бы отсюда сигналы и select-ы. Это можно сделать,
-; если сразу выдавать из poll. Но проблема в том, что этот цикл по ports тогда
-; просто переедет в selector. Поэтому здесь проще просто выдавать события в виде
-; поток. Тогда не придётся перевызывать процедуру и страдать с каррированием и
-; промежуточными контекстами.
 
 (define (selector timeout . ports)
   (let ((T (and (timeout? timeout) timeout)))
@@ -81,15 +88,25 @@
                         (else (cons #:unknown-port (cons p '())))))
                 (ready-ports s n))))
 
+
 (define (fork-command opts)
-  (let ((cmd (options:command opts)))
-    (let ((p (primitive-fork)))
+  (let-values (((R W) (let ((p (event-pipe))) (values (to-read p) (to-write p)))))
+    (let ((cmd (options:command opts))
+          (p (primitive-fork)))
       (if (zero? p)
           (begin
-            ; (setpgid 0 0)
+            (default-signals)
+            (close-output-port W)
+            (unless (char=? #\G (read-char R)) (exit 1))
+            (clear-ports)
+            (dump-error "worker is clean to go. PID: ~a~%" (getpid))
             (apply execlp (car cmd) cmd))
-          (begin (dump-error "worker started with PID: ~a~%" p)
-                 p)))))
+          (begin 
+            (close-input-port R)
+            (setpgid p p)
+            (write-char #\G W)
+            (close-output-port W)
+            p)))))
 
 (define kind car)
 (define eof? cadr)
@@ -155,13 +172,11 @@
     ((any-triggers? opts (content e)) (if (positive? pid)
                                           (if rerun?
                                               (begin
-                                                (dump-error "interrupting in progress for PID: ~a~%" pid)
+                                                (dump-error "interruption in progress for PID: ~a~%" pid)
                                                 (loop R pid rerun?))
                                               (begin 
                                                 (dump-error "interrupting worker with PID: ~a~%" pid)
-                                                (sigaction SIGINT SIG_IGN)
-                                                (kill (- (getpid)) SIGINT)
-                                                (sigaction SIGINT SIG_DFL)
+                                                (kill (- pid) SIGINT)
                                                 (loop R pid #t)))
                                           (loop R (fork-command opts) #f)))
 

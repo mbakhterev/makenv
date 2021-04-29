@@ -8,7 +8,7 @@
 
 (define dump-error
   (let ((p (current-error-port)))
-    (lambda (fmt . args) (apply format p fmt args))))
+    (lambda (fmt . args) (apply format p fmt args) (force-output p))))
 
 (define (tune-env! opts)
   (setenv "BDIR" (options:target opts))
