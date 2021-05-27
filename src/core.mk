@@ -251,7 +251,7 @@ $(bits)/%.png: %.png
 
 $(bits)/%.pdf: $(bits)/%.tex
 	@ $(guile (echo-tex "$@"))
-	@ (cd $(@D) && $(guile (biberize! "$^")) && $(tex) $(<F)) >"$@".out \
+	@ { cd $(@D) && $(guile (biberize! "$^")) && $(tex) $(<F); } >"$@".out \
 		|| { iconv -cf $(texcode) $(guile (tex-log "$@")); exit -1; }
 
 $(bits)/%.pdf: $(bits)/%.xtex

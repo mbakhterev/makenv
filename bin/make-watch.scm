@@ -53,6 +53,7 @@
           (close-output-port W)
           (unless (char=? #\G (read-char R)) (exit 1))
           (clear-ports)
+          (tune-env! opts)
           (dump-error "worker is clean to go. PID: ~a~%" (getpid))
           (apply execlp (car cmd) cmd))
         (begin 
@@ -153,10 +154,6 @@
                         (else (cons #:unknown-port (cons p '())))))
                 (ready-ports s n))))
 
-; (define kind car)
-; (define eof? cadr)
-; (define content cddr)
-
 (define eof? car)
 (define content cdr)
 
@@ -181,12 +178,6 @@
     (lost? 0)
 
     (else (loop (if rerun? (fork-command opts) 0) #f 0))))
-
-; (define (resignal pid s)
-;   (dump-error "SIGINT~%")
-;   (when (positive? pid) (kill (- pid) s))
-;   (default-signals)
-;   (kill (let ((p (getpid))) (= p (getpgrp)) (- p) p) s))
 
 (define (int-step opts pid rerun? signals loop)
   (dump-error "SIGINT~%")
@@ -311,35 +302,18 @@
 
             ; Когда приходит информация об изменениях в fs, то после их
             ; обработки, может вернуться информация о процессе, о необходимости
-            ; его перезапустить и о потери notification-канала.
+            ; его перезапустить и о потере notification-канала.
             ((equal? n (car P))
              (notification-step opts
                                 (n-drain)
                                 pid
                                 rerun?
                                 signals
-                                (lambda (p r? l?)
-                                  (loop (if l? (selector #f s) poll)
-                                        (cdr P) p r? signals l?))))
+                                (lambda (p r? l?) (loop (if l? (selector #f s) poll)
+                                                        (cdr P) p r? signals l?))))
 
             (else (dump-error "unknown port: ~a~%" (car P))
                   pid)))))
-
-; (define (main-loop-old opts)
-;   (let loop ((E (events opts))
-;              (pid 0)
-;              (rerun? #f))
-;     ; Следующий элемент потока вычисляется в (stream-car E). R -- это ссылка на
-;     ; остаток потока.
-;     (let ((e (stream-car E))
-;           (R (stream-cdr E)))
-;       ((case (kind e)
-;          ((#:signal) signal-step)
-;          ((#:notification) notification-step)
-;          (else (lambda A
-;                  (dump-error "unexpected event structure: ~a~%" e)
-;                  pid)))
-;        opts e loop R pid rerun?))))
 
 (let ((p (main-loop (parse-options (cdr (command-line))))))
   (dump-error "should not be here. PID: ~a~%" p)
