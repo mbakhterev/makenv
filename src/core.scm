@@ -6,9 +6,8 @@
 ; (define gmk-expand (lambda (v) ""))
 ; (define gmk-eval (lambda (v) '()))
 
-(define dump-error
-  (let ((p (current-error-port)))
-    (lambda (fmt . args) (apply format p fmt args))))
+(define dump-error (let ((p (current-error-port)))
+                     (lambda (fmt . args) (apply format p fmt args))))
 
 ; Вычисление описания системной ошибки по err -- информации об исключении
 (define (error-string fn-name path err)
@@ -16,6 +15,11 @@
           fn-name path
           (cond ((eq? 'system-error (car err)) (strerror (system-error-errno err)))
                 ((eq? 'internal (car err)) (cadr err)))))
+
+(define (dump-error-string fn-name path err)
+  (dump-error "~s~%" (error-string fn-name path err)))
+
+(define (internal-error fmt . args) (list 'internal (apply format #f fmt args)))
 
 ; Составление пути из отдельных компонент
 (define join-path
@@ -110,17 +114,14 @@
     ; передающуюся в path; в остальных случаях непреодолимая ошибка.
     (define (handler items)
       (lambda err
-        ; (dump-error "handler: items: ~s~%" items)
         (let ((errno (system-error-errno err)))
           (cond ((eqv? ENOENT errno) items)
                 (else (apply throw err))))))
 
     (let loop ((items path))
-      ; (dump-error "changing dir to: ~s~%" (car path))
       (if (null? items)
         '()
         (let ((v (catch 'system-error (lambda () (chdir (car items))) (handler items))))
-          ; (dump-error "items: ~s~%" v)
           (if (not (unspecified? v))
             v
             (loop (cdr items)))))))
@@ -179,7 +180,6 @@
 
 ; Определение пути до текущего файла
 (define (nodepath) (dirname (gmk-expand "$(lastword $(MAKEFILE_LIST))")))
-; (define (bitspath) (join-path (gmk-expand "$(bits)") (nodepath)))
 (define (bitspath) (join-path bits (nodepath)))
 
 ; Процедура вывода информации о выполняемом сценарии. Чтобы имитировать
@@ -280,7 +280,6 @@
 
   ; Генерация параметризованного обработчика исключений для красивых сообщений
   ; об ошибках
-
   (define (handler item on-error)
     (lambda err
       (format (current-error-port) "~s" (error-string 'fix-deps item err))
@@ -355,16 +354,6 @@
       (for-each route-lambda
                 (if (null? extensions) (list default-extension) extensions)))))
 
-; (define (tex-route source . extensions)
-;   (with-output-to-string
-;     (lambda ()
-;       (for-each (lambda (ext) (format #t "~a~%~/~a~%~/~a~%~/~a~%"
-;                                       (form-headline (reroot source) ext "tex")
-;                                       "@ $(guile (echo-tex/cnv \"$@\"))"
-;                                       "@ $(guile (ensure-path! \"$(@D)\"))"
-;                                       "@ iconv -t $(texcode) < '$<' > '$@'"))
-;                 (if (null? extensions) '("tex") extensions)))))
-
 (define (tex-route source . extensions)
   (any-route source extensions "tex"
              (lambda (ext) (format #t "~a~%~/~a~%~/~a~%~/~a~%"
@@ -381,15 +370,6 @@
                                    "@ $(guile (ensure-path! \"$(@D)\"))"
                                    "@ iconv -t $(texcode) < '$<' > '$@'"))))
 
-; (define (png-route source ext)
-;   (with-output-to-string
-;     (lambda ()
-;       (format #t "~a~%~/~a~%~/~a~%~/~a~%"
-;               (form-headline (reroot source) ext "png")
-;               "@ $(guile (echo-pix \"$@\"))"
-;               "@ $(guile (ensure-path! \"$(@D)\"))"
-;               "@ cp '$<' '$@'"))))
-
 (define (png-route source . extensions)
   (any-route source extensions "png"
              (lambda (ext) (format #t "~a~%~/~a~%~/~a~%~/~a~%"
@@ -398,7 +378,6 @@
                                    "@ $(guile (ensure-path! \"$(@D)\"))"
                                    "@ cp '$<' '$@'"))))
 
-; (define (tex-log path) (string-append (drop-ext path) ".log"))
 (define (tex-log path) (string-append path ".out"))
 
 ; Процедура подбирает подходящий toolchain-файл по имени. Поиск сначала в
@@ -414,48 +393,123 @@
         tcn-base
         (gmk-error "no toolchain: ~a" name)))))
 
+; ; Процедура проверяет, нужно ли запускать biber для вёрстки списка литературы.
+; ; Проверка осуществляет по изменениям в: (1) bcf-файле, который создаёт компиляция
+; ; исходного tex-файла; (2) bib-файлах из списка предпосылок -- аргументе
+; ; biberize! Исходный tex-файл -- это первый элемент в этом списке. Изменением
+; ; считается изменение контрольной sha-суммы
+; (define (biberize! prerequisites)
+;   (define files (string-split prerequisites char-set:whitespace))
+;   (define path (car files))
+;   (define bibs (filter (lambda (f) (string-suffix? ".bib" f)) (cdr files)))
+; 
+;   (define handler (lambda err
+;                     (format (current-error-port) "~s" (error-string 'biberize! path err))
+;                     "false"))
+; 
+;   (let* ((bcf (string-append (drop-ext path) ".bcf"))
+;          (bcf-sum (string-append bcf ".sum")))
+;     ; Если списка литературы нет, то пропускаем biber, формируя вместо команды
+;     ; с biber-ом команду true. Если список есть, нужно проверить, новый ли он.
+;     ; Для этого используется shasum. Если он не изменился, по shasum-критерию,
+;     ; то тоже пропускаем biber. Надеюсь в этом коде, на то, что with-конструкции
+;     ; закрывают порты при ошибках
+;     (if (not (access? bcf R_OK))
+;      "true"
+;       (catch
+;         'system-error
+;         (lambda ()
+;           (let ((known-sums (if (not (access? bcf-sum R_OK))
+;                               ""
+;                               (with-input-from-file bcf-sum read)))
+;                 (new-sums (with-input-from-port
+;                             (apply open-pipe* OPEN_READ "shasum" bcf bibs)
+;                             (lambda ()
+;                               (let lp ((l (read-line)))
+;                                 (if (eof-object? l)
+;                                   '()
+;                                   (cons l (lp (read-line)))))))))
+;             (if (equal? known-sums new-sums)
+;               "true"
+;               (begin
+;                 (with-output-to-file bcf-sum (lambda () (write new-sums)))
+;                 (string-append (gmk-expand "$(biber)") " " (basename bcf))))))
+;         handler))))
+
+(define (shasum files)
+  (with-input-from-port
+    (apply open-pipe* OPEN_READ "shasum" files)
+    (lambda ()
+      (unfold eof-object? identity (lambda x (read-line)) (read-line)))))
+
+(define (replace-ext path ext) (string-append (drop-ext path) ext))
+
 ; Процедура проверяет, нужно ли запускать biber для вёрстки списка литературы.
-; Проверка осуществляет по изменениям в: (1) bcf-файле, который создаёт компиляция
-; исходного tex-файла; (2) bib-файлах из списка предпосылок -- аргументе
-; biberize! Исходный tex-файл -- это первый элемент в этом списке. Изменением
-; считается изменение контрольной sha-суммы
-(define (biberize! prerequisites)
-  (define files (string-split prerequisites char-set:whitespace))
-  (define path (car files))
-  (define bibs (filter (lambda (f) (string-suffix? ".bib" f)) (cdr files)))
-
-  (define handler (lambda err
-                    (format (current-error-port) "~s" (error-string 'biberize! path err))
-                    "false"))
-
-  (let* ((bcf (string-append (drop-ext path) ".bcf"))
-         (bcf-sum (string-append bcf ".sum")))
-    ; Если списка литературы нет, то пропускаем biber, формируя вместо команды
-    ; с biber-ом команду true. Если список есть, нужно проверить, новый ли он.
-    ; Для этого используется shasum. Если он не изменился, по shasum-критерию,
-    ; то тоже пропускаем biber. Надеюсь в этом коде, на то, что with-конструкции
-    ; закрывают порты при ошибках
+; Если не нужно, то формирует команду true для make. Если нужно, то команду
+; запуска biber. Проверка осуществляет по изменениям в: (1) bcf-файле,
+; который создаёт компиляция исходного tex-файла по пути path; (2) bib-файлах
+; из списка bibs. Изменением считается изменение контрольных sha-сумм
+(define (biberize! path bibs)
+  (let* ((bcf (replace-ext path ".bcf"))
+         (sha-sums (string-append bcf ".sum")))
     (if (not (access? bcf R_OK))
-     "true"
-      (catch
-        'system-error
-        (lambda ()
-          (let ((known-sums (if (not (access? bcf-sum R_OK))
-                              ""
-                              (with-input-from-file bcf-sum read)))
-                (new-sums (with-input-from-port
-                            (apply open-pipe* OPEN_READ "shasum" bcf bibs)
-                            (lambda ()
-                              (let lp ((l (read-line)))
-                                (if (eof-object? l)
-                                  '()
-                                  (cons l (lp (read-line)))))))))
-            (if (equal? known-sums new-sums)
-              "true"
-              (begin
-                (with-output-to-file bcf-sum (lambda () (write new-sums)))
-                (string-append (gmk-expand "$(biber)") " " (basename bcf))))))
-        handler))))
+      ; Если bcf-файл не создан при компиляции, значит, списка литературы нет,
+      ; значит, пропускаем запуск biber, возвращая команду true для make
+      "true"
+      ; В противном случае подсчитываем суммы и сравниваем с прежними
+      (let ((known-sums (if (not (access? sha-sums R_OK))
+                          ""
+                          (with-input-from-file sha-sums read)))
+            (new-sums (shasum (cons bcf bibs))))
+        (if (equal? known-sums new-sums)
+          ; Если суммы совпадают, то пропускаем запуск biber
+          "true"
+          ; Иначе, обновляем суммы и формируем команду для запуска biber
+          (begin
+            (with-output-to-file sha-sums (lambda () (write new-sums)))
+            (string-appen (gmk-expand "$(biber)") " " (basename bcf)))))))) 
+
+(define (collect-citations aux)
+  (sort (filter (lambda (s) (string-prefix "\\citation" s))
+                (with-input-from-file
+                  aux
+                  (unfold eof-object? identity (lambda x (read-line)) (read-line))))
+        string<))
+
+; Процедура проверяет, нужно ли запускать bibtex для вёрстки списка
+; литературы. Если не нужно, то формирует команду true для make. Если нужно,
+; то команду bibtex. Проверка осуществляется по изменениям в: (1) списке цитат
+; из aux-файла, сформированного при компиляции исходного tex-файла по пути
+; path; (2) bib-файлах списка bibs. Изменением считается изменение множества
+; ссылок и контрольных sha-сумм для bib-файлов.
+(define (bibtexify! path bibs)  
+  (let* ((aux (replace-ext path ".aux"))
+         (control (string-append aux ".ctl")))
+    (if (not (access? aux R_OK))
+      "true"
+      (let ((known (if (not (access? control R_OK))))
+            (new (cons (collect-citations aux) (sha-sums bibs))))
+        (if (equal? known new)
+          "true"
+          (begin
+            (with-output-to-file control (lambda () (write new-sums)))
+            (string-append (gmk-expand "$(bibtex)") " " (basename aux)))))))) 
+
+(define (bibify! prerequisites)
+
+
+  (let* ((engine (gmk-expand "$(bib-engine)"))
+         (files (string-split prerequisites char-set:whitespace))
+         (path (car files))
+         (bibs (filter (lambda (f) (string-suffix? ".bib" f)) (cdr files))))
+    (cond ((string=? "biber" engine) (biberize! path bibs))
+          ((string=? "bibtex" engine) (bibtexfy! path bibs))
+          (else (dump-error "~s"
+                            (error-string 'bibify!
+                                          path
+                                          (list 'internal
+                                                (string-append "unknown engine: " engine))))
+                "false"))))
 
 (define (undefine-vars . vars)
   (define combinations
@@ -474,19 +528,7 @@
     (lambda ()
       (for-each (lambda (v) (format #t "undefine ~a~%" v)) combinations))))
 
-; (define (std-tex-rules target sources routes)
-;   (let* ((bits (bitspath))
-;          (t (join-path bits target))
-;          (s (string-join (map (lambda (p) (join-path bits p)) sources) " ")))
-;     (with-output-to-string
-;       (lambda ()
-;         ; (format #t "target: ~s~%sources: ~s~%bits: ~s~%" target sources bits)
-;         (format #t "~a: ~a~%" t s)
-;         (for-each (lambda (p) (format #t "~%~a" (tex-route (car p) (cdr p))))
-;                   routes)))))
-
 ; FIXME: Примитивчик. 
-
 (define (var->list var)
   ; Некий небезопасный эксперимент. Если cond не доходит до конца, будет
   ; undefined. Интересно, как это всё себя ведёт 
@@ -506,7 +548,6 @@
                                         (loop (read) (cons v R)))))))))
 
 ; FIXME: Проблема с именами, содержащими пробелы
-
 (define (std-tex-rules var)
   (let ((bits (bitspath))
         (sources (var->list var)))
