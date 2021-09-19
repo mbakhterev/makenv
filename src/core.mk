@@ -215,7 +215,7 @@ endif # группа правил flex/yacc
 
 ifdef tex 
 
-vars = bib biber tex xtex texcode
+vars = tex xtex biber bibtex bib-engine texcode
 $(guile (check-vars "{Xe}LaTeX group" "$(vars)"))
 
 $(bits)/%.tex: %.tex
@@ -251,12 +251,12 @@ $(bits)/%.png: %.png
 
 $(bits)/%.pdf: $(bits)/%.tex
 	@ $(guile (echo-tex "$@"))
-	@ { cd $(@D) && $(guile (biberize! "$^")) && $(tex) $(<F); } >"$@".out \
+	@ { cd $(@D) && $(guile (bibify! "$^")) && $(tex) $(<F); } >"$@".out \
 		|| { iconv -cf $(texcode) $(guile (tex-log "$@")); exit -1; }
 
 $(bits)/%.pdf: $(bits)/%.xtex
 	@ $(guile (echo-xtex "$@"))
-	@ (cd $(@D) && $(guile (biberize! "$^")) && $(xtex) $(<F)) >"$@".out \
+	@ (cd $(@D) && $(guile (bibify! "$^")) && $(xtex) $(<F)) >"$@".out \
 		|| { cat $(guile (tex-log "$@")); exit -1; }
 
 $(D)/%.pdf:

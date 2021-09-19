@@ -1,6 +1,7 @@
 (use-modules (ice-9 popen)
              (ice-9 rdelim)
              (ice-9 receive)
+             (srfi srfi-1)
              (srfi srfi-42))
 
 ; (define gmk-expand (lambda (v) ""))
@@ -467,13 +468,17 @@
           ; Иначе, обновляем суммы и формируем команду для запуска biber
           (begin
             (with-output-to-file sha-sums (lambda () (write new-sums)))
-            (string-appen (gmk-expand "$(biber)") " " (basename bcf)))))))) 
+            (string-append (gmk-expand "$(biber)") " " (basename bcf)))))))) 
 
-(define (collect-citations aux)
-  (sort (filter (lambda (s) (string-prefix "\\citation" s))
+(define (citations aux)
+  (dump-error "citations: ~a~%" aux)
+  (sort (filter (lambda (s) (string-prefix? "\\citation" s))
                 (with-input-from-file
                   aux
-                  (unfold eof-object? identity (lambda x (read-line)) (read-line))))
+                  (lambda () (unfold eof-object?
+                                     identity
+                                     (lambda (x) (dump-error "~a~%" x) (read-line))
+                                     (read-line)))))
         string<))
 
 ; Процедура проверяет, нужно ли запускать bibtex для вёрстки списка
@@ -487,29 +492,29 @@
          (control (string-append aux ".ctl")))
     (if (not (access? aux R_OK))
       "true"
-      (let ((known (if (not (access? control R_OK))))
-            (new (cons (collect-citations aux) (sha-sums bibs))))
+      (let ((known (if (not (access? control R_OK))
+                     ""
+                     (with-input-from-file control read)))
+            (new (cons (citations aux) (shasum bibs))))
         (if (equal? known new)
           "true"
           (begin
-            (with-output-to-file control (lambda () (write new-sums)))
-            (string-append (gmk-expand "$(bibtex)") " " (basename aux)))))))) 
+            (with-output-to-file control (lambda () (write new)))
+            (string-append "echo bibtex! && "(gmk-expand "$(bibtex)") " " (basename aux)))))))) 
 
 (define (bibify! prerequisites)
-
-
-  (let* ((engine (gmk-expand "$(bib-engine)"))
-         (files (string-split prerequisites char-set:whitespace))
-         (path (car files))
-         (bibs (filter (lambda (f) (string-suffix? ".bib" f)) (cdr files))))
-    (cond ((string=? "biber" engine) (biberize! path bibs))
-          ((string=? "bibtex" engine) (bibtexfy! path bibs))
-          (else (dump-error "~s"
-                            (error-string 'bibify!
-                                          path
-                                          (list 'internal
-                                                (string-append "unknown engine: " engine))))
-                "false"))))
+  (let ((engine (gmk-expand "$(bib-engine)"))
+        (files (string-split prerequisites char-set:whitespace)))
+    (catch
+      'system-error
+      (lambda ()
+        ((cond ((string=? "biber" engine) biberize!)
+               ((string=? "bibtex" engine) bibtexify!)
+               (else (throw 'internal
+                            (string-append "unknown engine: " engine))))
+         (car files)
+         (filter (lambda (f) (string-suffix? ".bib" f)) (cdr files))))
+      (lambda err (dump-error-string 'bibify! (car files) err) "false"))))
 
 (define (undefine-vars . vars)
   (define combinations
