@@ -471,13 +471,15 @@
             (string-append (gmk-expand "$(biber)") " " (basename bcf)))))))) 
 
 (define (citations aux)
-  (dump-error "citations: ~a~%" aux)
+  ; (dump-error "citations: ~a~%" aux)
   (sort (filter (lambda (s) (string-prefix? "\\citation" s))
                 (with-input-from-file
                   aux
                   (lambda () (unfold eof-object?
                                      identity
-                                     (lambda (x) (dump-error "~a~%" x) (read-line))
+                                     (lambda (x)
+                                       ; (dump-error "~a~%" x)
+                                       (read-line))
                                      (read-line)))))
         string<))
 
@@ -492,15 +494,19 @@
          (control (string-append aux ".ctl")))
     (if (not (access? aux R_OK))
       "true"
-      (let ((known (if (not (access? control R_OK))
-                     ""
-                     (with-input-from-file control read)))
-            (new (cons (citations aux) (shasum bibs))))
-        (if (equal? known new)
-          "true"
+      (let* ((known (if (not (access? control R_OK))
+                      ""
+                      (with-input-from-file control read)))
+             (refs (citations aux))
+             (new (cons refs (shasum bibs))))
+        (if (or (null? refs) (equal? known new))
           (begin
+            ; (dump-error "bibtex run is NOT needed~%")
+            "true")
+          (begin
+            ; (dump-error "bibtex run is needed~%")
             (with-output-to-file control (lambda () (write new)))
-            (string-append "echo bibtex! && "(gmk-expand "$(bibtex)") " " (basename aux)))))))) 
+            (string-append (gmk-expand "$(bibtex)") " " (basename aux)))))))) 
 
 (define (bibify! prerequisites)
   (let ((engine (gmk-expand "$(bib-engine)"))

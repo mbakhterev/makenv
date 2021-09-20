@@ -251,12 +251,12 @@ $(bits)/%.png: %.png
 
 $(bits)/%.pdf: $(bits)/%.tex
 	@ $(guile (echo-tex "$@"))
-	@ { cd $(@D) && $(guile (bibify! "$^")) && $(tex) $(<F); } >"$@".out \
+	@ { cd $(@D) && $(tex) $(<F) && $(guile (bibify! "$^")); } >"$@".out \
 		|| { iconv -cf $(texcode) $(guile (tex-log "$@")); exit -1; }
 
 $(bits)/%.pdf: $(bits)/%.xtex
 	@ $(guile (echo-xtex "$@"))
-	@ (cd $(@D) && $(guile (bibify! "$^")) && $(xtex) $(<F)) >"$@".out \
+	@ { cd $(@D) && $(xtex) $(<F) && $(guile (bibify! "$^")); } >"$@".out \
 		|| { cat $(guile (tex-log "$@")); exit -1; }
 
 $(D)/%.pdf:
