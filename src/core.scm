@@ -520,9 +520,10 @@
 ; path; (2) bib-файлах списка bibs. Изменением считается изменение множества
 ; ссылок и контрольных sha-сумм для bib-файлов.
 (define (bibtexify! path bibs known)
+  ; (dump-error "bibtexify!: ~s ~s ~s~%" path bibs known)
   (let ((aux (replace-ext path ".aux")))
     (if (not (access? aux R_OK))
-      "true"
+      (values "" '())
       (let* ((refs (citations aux))
              (new (cons refs (shasum bibs))))
         (if (equal? known new) 
@@ -542,6 +543,7 @@
          (path (car files))
          (bibs (filter (lambda (f) (string-suffix? ".bib" f)) (cdr files)))
          (state (replace-ext path ".bib-state")))
+    ; (dump-error "bibify!: ~s ~s~%" bibs engine)
     (catch
       'system-error
       (lambda ()
