@@ -3,6 +3,6 @@ xtex := xelatex -halt-on-error -file-line-error -interaction=nonstopmode
 texcode := utf8
 
 biber := biber
-bibtex := bibtex
+bibtex := bibtex -terse
 
 bib-engine := bibtex

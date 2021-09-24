@@ -203,7 +203,7 @@
 (make-echoes "install"
              "dep" "dep/gen" "dep-c++" "c" "c/gen" "c++" "h" "h/gen"
              "link" "lib"
-             "tex" "xtex" "tex/cnv" "xtex/cp" "biber" "bib/cnv"
+             "tex" "xtex" "tex/cnv" "xtex/cp" "bib" "bib/cnv"
              "cp" "pix"
              "asm" "elf" "bin" "hex" "o")
 
@@ -506,7 +506,11 @@
           (begin
             ; (dump-error "bibtex run is needed~%")
             (with-output-to-file control (lambda () (write new)))
-            (string-append (gmk-expand "$(bibtex)") " " (basename aux)))))))) 
+            (let ((cmd (string-append (echo-bib aux)
+                                      " && "
+                                      (gmk-expand "$(bibtex)") " " (basename aux))))
+              ; (dump-error "bibcmd: ~s~%" cmd)
+              cmd))))))) 
 
 (define (bibify! prerequisites)
   (let ((engine (gmk-expand "$(bib-engine)"))
