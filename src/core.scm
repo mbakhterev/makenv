@@ -2,6 +2,7 @@
              (ice-9 rdelim)
              (ice-9 receive)
              (srfi srfi-1)
+             (srfi srfi-11)
              (srfi srfi-42))
 
 ; (define gmk-expand (lambda (v) ""))
@@ -483,48 +484,90 @@
                                      (read-line)))))
         string<))
 
+; ; Процедура проверяет, нужно ли запускать bibtex для вёрстки списка
+; ; литературы. Если не нужно, то формирует команду true для make. Если нужно,
+; ; то команду bibtex. Проверка осуществляется по изменениям в: (1) списке цитат
+; ; из aux-файла, сформированного при компиляции исходного tex-файла по пути
+; ; path; (2) bib-файлах списка bibs. Изменением считается изменение множества
+; ; ссылок и контрольных sha-сумм для bib-файлов.
+; (define (bibtexify! path bibs)
+;   (let* ((aux (replace-ext path ".aux"))
+;          (control (string-append aux ".ctl")))
+;     (if (not (access? aux R_OK))
+;       "true"
+;       (let* ((known (if (not (access? control R_OK))
+;                       ""
+;                       (with-input-from-file control read)))
+;              (refs (citations aux))
+;              (new (cons refs (shasum bibs))))
+;         (if (or (null? refs) (equal? known new))
+;           (begin
+;             ; (dump-error "bibtex run is NOT needed~%")
+;             "true")
+;           (begin
+;             ; (dump-error "bibtex run is needed~%")
+;             (with-output-to-file control (lambda () (write new)))
+;             (let ((cmd (string-append (echo-bib aux)
+;                                       " && "
+;                                       (gmk-expand "$(bibtex)") " " (basename aux))))
+;               ; (dump-error "bibcmd: ~s~%" cmd)
+;               cmd))))))) 
+
 ; Процедура проверяет, нужно ли запускать bibtex для вёрстки списка
 ; литературы. Если не нужно, то формирует команду true для make. Если нужно,
 ; то команду bibtex. Проверка осуществляется по изменениям в: (1) списке цитат
 ; из aux-файла, сформированного при компиляции исходного tex-файла по пути
 ; path; (2) bib-файлах списка bibs. Изменением считается изменение множества
 ; ссылок и контрольных sha-сумм для bib-файлов.
-(define (bibtexify! path bibs)  
-  (let* ((aux (replace-ext path ".aux"))
-         (control (string-append aux ".ctl")))
+(define (bibtexify! path bibs known)
+  (let ((aux (replace-ext path ".aux")))
     (if (not (access? aux R_OK))
       "true"
-      (let* ((known (if (not (access? control R_OK))
-                      ""
-                      (with-input-from-file control read)))
-             (refs (citations aux))
+      (let* ((refs (citations aux))
              (new (cons refs (shasum bibs))))
-        (if (or (null? refs) (equal? known new))
-          (begin
-            ; (dump-error "bibtex run is NOT needed~%")
-            "true")
-          (begin
-            ; (dump-error "bibtex run is needed~%")
-            (with-output-to-file control (lambda () (write new)))
-            (let ((cmd (string-append (echo-bib aux)
-                                      " && "
-                                      (gmk-expand "$(bibtex)") " " (basename aux))))
-              ; (dump-error "bibcmd: ~s~%" cmd)
-              cmd))))))) 
+        (if (equal? known new) 
+          (values "" '())
+          (let ((cmd (format #f
+                             "~a && ~a '~a'"
+                             (echo-bib aux)
+                             (gmk-expand "$(bibtex)")
+                             (basename aux))))
+            (values cmd new))))))) 
+
+(define bib-state '())
 
 (define (bibify! prerequisites)
-  (let ((engine (gmk-expand "$(bib-engine)"))
-        (files (string-split prerequisites char-set:whitespace)))
+  (let* ((engine (gmk-expand "$(bib-engine)"))
+         (files (string-split prerequisites char-set:whitespace))
+         (path (car files))
+         (bibs (filter (lambda (f) (string-suffix? ".bib" f)) (cdr files)))
+         (state (replace-ext path ".bib-state")))
     (catch
       'system-error
       (lambda ()
-        ((cond ((string=? "biber" engine) biberize!)
-               ((string=? "bibtex" engine) bibtexify!)
-               (else (throw 'internal
-                            (string-append "unknown engine: " engine))))
-         (car files)
-         (filter (lambda (f) (string-suffix? ".bib" f)) (cdr files))))
-      (lambda err (dump-error-string 'bibify! (car files) err) "false"))))
+        (unless (null? bib-state)
+          (throw 'internal
+                 (string-append "bib state is not empty: " bib-state)))
+        (let ((bib! (cond ((string=? "biber" engine) biberize!)
+                          ((string=? "bibtex" engine) bibtexify!)
+                          (else (throw 'internal
+                                       (string-append "unknown engine: " engine)))))
+              (known (if (not (access? state R_OK)) '() (with-input-from-file state read))))
+          (let-values (((cmd new) (bib! path bibs known)))
+            ; (dump-error "CMD: ~s~%NEW: ~s~%" cmd new)
+            (if (null? new)
+              "true"
+              (begin (set! bib-state (cons state new))
+                     cmd)))))
+      (lambda err (dump-error-string 'bibify! path err) "false"))))
+
+(define (bibify-end!)
+  (if (not (pair? bib-state))
+    "true"
+    (let ((path (car bib-state))
+          (state (cdr bib-state)))
+      (set! bib-state '())
+      (format #f "echo '~s' > '~a'" state path))))
 
 (define (undefine-vars . vars)
   (define combinations

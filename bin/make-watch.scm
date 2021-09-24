@@ -259,8 +259,8 @@
                (dump-error "interruption in progress. PID: ~a~%" pid)
                (loop pid rerun? #f))
              (begin 
-               ; (dump-error "interrupting PID: ~a~%" pid)
-               ; (kill (- pid) SIGINT)
+               (dump-error "interrupting PID: ~a~%" pid)
+               (kill (- pid) SIGINT)
                (loop pid #t #f)))
          (loop (fork-command opts) #f #f)))
 

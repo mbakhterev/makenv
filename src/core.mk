@@ -250,10 +250,11 @@ $(bits)/%.png: %.png
 # нужен список всех предпосылок.
 
 $(bits)/%.pdf: $(bits)/%.tex
-	@ { cd $(@D) 										 \
+	@ { cd $(@D)                     \
 			&& $(guile (bibify! "$^"))   \
 			&& $(guile (echo-tex "$@"))  \
-			&& $(tex) $(<F) >"$@".out; } \
+			&& $(tex) $(<F) >"$@".out    \
+			&& $(guile (bibify-end!)); } \
 		|| { iconv -cf $(texcode) $(guile (tex-log "$@")); exit -1; }
 
 $(bits)/%.pdf: $(bits)/%.xtex
