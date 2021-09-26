@@ -250,7 +250,7 @@ $(bits)/%.png: %.png
 # нужен список всех предпосылок.
 
 $(bits)/%.pdf: $(bits)/%.tex
-	{ cd $(@D)                     \
+	@ { cd $(@D)                     \
 			&& $(guile (bibify! "$^"))   \
 			&& $(guile (echo-tex "$@"))  \
 			&& $(tex) $(<F) >"$@".out    \
