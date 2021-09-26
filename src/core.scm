@@ -395,49 +395,6 @@
         tcn-base
         (gmk-error "no toolchain: ~a" name)))))
 
-; ; Процедура проверяет, нужно ли запускать biber для вёрстки списка литературы.
-; ; Проверка осуществляет по изменениям в: (1) bcf-файле, который создаёт компиляция
-; ; исходного tex-файла; (2) bib-файлах из списка предпосылок -- аргументе
-; ; biberize! Исходный tex-файл -- это первый элемент в этом списке. Изменением
-; ; считается изменение контрольной sha-суммы
-; (define (biberize! prerequisites)
-;   (define files (string-split prerequisites char-set:whitespace))
-;   (define path (car files))
-;   (define bibs (filter (lambda (f) (string-suffix? ".bib" f)) (cdr files)))
-; 
-;   (define handler (lambda err
-;                     (format (current-error-port) "~s" (error-string 'biberize! path err))
-;                     "false"))
-; 
-;   (let* ((bcf (string-append (drop-ext path) ".bcf"))
-;          (bcf-sum (string-append bcf ".sum")))
-;     ; Если списка литературы нет, то пропускаем biber, формируя вместо команды
-;     ; с biber-ом команду true. Если список есть, нужно проверить, новый ли он.
-;     ; Для этого используется shasum. Если он не изменился, по shasum-критерию,
-;     ; то тоже пропускаем biber. Надеюсь в этом коде, на то, что with-конструкции
-;     ; закрывают порты при ошибках
-;     (if (not (access? bcf R_OK))
-;      "true"
-;       (catch
-;         'system-error
-;         (lambda ()
-;           (let ((known-sums (if (not (access? bcf-sum R_OK))
-;                               ""
-;                               (with-input-from-file bcf-sum read)))
-;                 (new-sums (with-input-from-port
-;                             (apply open-pipe* OPEN_READ "shasum" bcf bibs)
-;                             (lambda ()
-;                               (let lp ((l (read-line)))
-;                                 (if (eof-object? l)
-;                                   '()
-;                                   (cons l (lp (read-line)))))))))
-;             (if (equal? known-sums new-sums)
-;               "true"
-;               (begin
-;                 (with-output-to-file bcf-sum (lambda () (write new-sums)))
-;                 (string-append (gmk-expand "$(biber)") " " (basename bcf))))))
-;         handler))))
-
 (define (shasum files)
   (with-input-from-port
     (apply open-pipe* OPEN_READ "shasum" files)
@@ -471,18 +428,38 @@
             (with-output-to-file sha-sums (lambda () (write new-sums)))
             (string-append (gmk-expand "$(biber)") " " (basename bcf)))))))) 
 
-(define (citations aux)
-  ; (dump-error "citations: ~a~%" aux)
-  (sort (filter (lambda (s) (string-prefix? "\\citation" s))
-                (with-input-from-file
-                  aux
-                  (lambda () (unfold eof-object?
-                                     identity
-                                     (lambda (x)
-                                       ; (dump-error "~a~%" x)
-                                       (read-line))
-                                     (read-line)))))
-        string<))
+; (define (citations aux)
+;   ; (dump-error "citations: ~a~%" aux)
+;   (sort (filter (lambda (s) (string-prefix? "\\citation" s))
+;                 (with-input-from-file
+;                   aux
+;                   (lambda () (unfold eof-object?
+;                                      identity
+;                                      (lambda (x)
+;                                        ; (dump-error "~a~%" x)
+;                                        (read-line))
+;                                      (read-line)))))
+;         string<))
+
+(define citations
+  (let ((r (make-regexp "^\\\\(citation|bibdata|bibstyle)")))
+    (lambda (aux)
+      (if (not (access? aux R_OK))
+        '()
+        (let ((bib-lines (sort (filter (lambda (s) (regexp-exec r s))
+                                       (with-input-from-file
+                                         aux
+                                         (lambda ()
+                                           (unfold eof-object?
+                                                   identity
+                                                   (lambda x (read-line))
+                                                   (read-line)))))
+                               string<)))
+          ; (dump-error "citations: ~s~%" bib-lines)
+          (if (not (and (string-prefix? "\\bibdata{" (car bib-lines))
+                        (string-prefix? "\\bibstyle{" (cadr bib-lines))))
+            '()
+            bib-lines))))))
 
 ; ; Процедура проверяет, нужно ли запускать bibtex для вёрстки списка
 ; ; литературы. Если не нужно, то формирует команду true для make. Если нужно,
@@ -521,19 +498,17 @@
 ; ссылок и контрольных sha-сумм для bib-файлов.
 (define (bibtexify! path bibs known)
   ; (dump-error "bibtexify!: ~s ~s ~s~%" path bibs known)
-  (let ((aux (replace-ext path ".aux")))
-    (if (not (access? aux R_OK))
+  (let* ((aux (replace-ext path ".aux"))
+         (refs (citations aux))
+         (new (cons refs (shasum bibs))))
+    (if (or (null? refs)
+            (equal? known new)) 
       (values "" '())
-      (let* ((refs (citations aux))
-             (new (cons refs (shasum bibs))))
-        (if (equal? known new) 
-          (values "" '())
-          (let ((cmd (format #f
-                             "~a && ~a '~a'"
-                             (echo-bib aux)
-                             (gmk-expand "$(bibtex)")
-                             (basename aux))))
-            (values cmd new))))))) 
+      (let ((cmd (format #f "~a && ~a '~a'"
+                         (echo-bib aux)
+                         (gmk-expand "$(bibtex)")
+                         (basename aux))))
+        (values cmd new))))) 
 
 (define bib-state '())
 
