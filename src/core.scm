@@ -380,6 +380,14 @@
                                    "@ $(guile (ensure-path! \"$(@D)\"))"
                                    "@ cp '$<' '$@'"))))
 
+(define (copy-route source . extensions)
+  (any-route source extensions "txt"
+             (lambda (ext) (format #t "~a~%~/~a~%~/~a~%~/~a~%"
+                                   (form-headline (reroot source) ext "txt")
+                                   "@ $(guile (echo-cp \"$@\"))"
+                                   "@ $(guile (ensure-path! \"$(@D)\"))"
+                                   "@ cp '$<' '$@'"))))
+
 (define (tex-log path) (string-append path ".out"))
 
 ; Процедура подбирает подходящий toolchain-файл по имени. Поиск сначала в
@@ -462,41 +470,14 @@
             '()
             bib-lines))))))
 
-; ; Процедура проверяет, нужно ли запускать bibtex для вёрстки списка
-; ; литературы. Если не нужно, то формирует команду true для make. Если нужно,
-; ; то команду bibtex. Проверка осуществляется по изменениям в: (1) списке цитат
-; ; из aux-файла, сформированного при компиляции исходного tex-файла по пути
-; ; path; (2) bib-файлах списка bibs. Изменением считается изменение множества
-; ; ссылок и контрольных sha-сумм для bib-файлов.
-; (define (bibtexify! path bibs)
-;   (let* ((aux (replace-ext path ".aux"))
-;          (control (string-append aux ".ctl")))
-;     (if (not (access? aux R_OK))
-;       "true"
-;       (let* ((known (if (not (access? control R_OK))
-;                       ""
-;                       (with-input-from-file control read)))
-;              (refs (citations aux))
-;              (new (cons refs (shasum bibs))))
-;         (if (or (null? refs) (equal? known new))
-;           (begin
-;             ; (dump-error "bibtex run is NOT needed~%")
-;             "true")
-;           (begin
-;             ; (dump-error "bibtex run is needed~%")
-;             (with-output-to-file control (lambda () (write new)))
-;             (let ((cmd (string-append (echo-bib aux)
-;                                       " && "
-;                                       (gmk-expand "$(bibtex)") " " (basename aux))))
-;               ; (dump-error "bibcmd: ~s~%" cmd)
-;               cmd))))))) 
-
-; Процедура проверяет, нужно ли запускать bibtex для вёрстки списка
-; литературы. Если не нужно, то формирует команду true для make. Если нужно,
-; то команду bibtex. Проверка осуществляется по изменениям в: (1) списке цитат
-; из aux-файла, сформированного при компиляции исходного tex-файла по пути
-; path; (2) bib-файлах списка bibs. Изменением считается изменение множества
-; ссылок и контрольных sha-сумм для bib-файлов.
+; Процедура проверяет, нужно ли запускать bibtex для вёрстки списка литературы.
+; Интерфейс с bibify! предписывает при необходимости запуска bibtex возврат пары
+; значений из команды и нового состояния для контроля изменений, в противном
+; случае возврат пустых команды и контрольного состояния. Проверка необходимости
+; запуска bibtex выполняется по изменениям в: (1) списке цитат из aux-файла,
+; сформированного при компиляции исходного tex-файла по пути path; (2)
+; bib-файлах списка bibs.  Изменением считается изменение множества ссылок и
+; контрольных sha-сумм для bib-файлов.
 (define (bibtexify! path bibs known)
   ; (dump-error "bibtexify!: ~s ~s ~s~%" path bibs known)
   (let* ((aux (replace-ext path ".aux"))
