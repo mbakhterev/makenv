@@ -298,7 +298,6 @@
                            (lambda ()
                              (let lp ((st #:start)
                                       (l (read-line c)))
-                               ; (format (current-error-port) "~a~%" l)
                                (if (eof-object? l)
                                  "true"
                                   (receive (state str) (fix-string st l)
@@ -450,7 +449,9 @@
                                                    (lambda x (read-line))
                                                    (read-line)))))
                                string<)))
-          (if (not (and (<= 2 (length bib-lines))
+          ; Чтобы bibtex не ломался, в aux-файле должны быть и citation, и
+          ; bibdata, и bibstyle
+          (if (not (and (< 2 (length bib-lines))
                         (string-prefix? "\\bibdata{" (car bib-lines))
                         (string-prefix? "\\bibstyle{" (cadr bib-lines))))
             '()
