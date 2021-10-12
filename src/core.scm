@@ -436,19 +436,6 @@
             (with-output-to-file sha-sums (lambda () (write new-sums)))
             (string-append (gmk-expand "$(biber)") " " (basename bcf)))))))) 
 
-; (define (citations aux)
-;   ; (dump-error "citations: ~a~%" aux)
-;   (sort (filter (lambda (s) (string-prefix? "\\citation" s))
-;                 (with-input-from-file
-;                   aux
-;                   (lambda () (unfold eof-object?
-;                                      identity
-;                                      (lambda (x)
-;                                        ; (dump-error "~a~%" x)
-;                                        (read-line))
-;                                      (read-line)))))
-;         string<))
-
 (define citations
   (let ((r (make-regexp "^\\\\(citation|bibdata|bibstyle)")))
     (lambda (aux)
@@ -463,7 +450,6 @@
                                                    (lambda x (read-line))
                                                    (read-line)))))
                                string<)))
-          ; (dump-error "citations: ~s~%" bib-lines)
           (if (not (and (<= 2 (length bib-lines))
                         (string-prefix? "\\bibdata{" (car bib-lines))
                         (string-prefix? "\\bibstyle{" (cadr bib-lines))))
@@ -479,7 +465,6 @@
 ; bib-файлах списка bibs.  Изменением считается изменение множества ссылок и
 ; контрольных sha-сумм для bib-файлов.
 (define (bibtexify! path bibs known)
-  ; (dump-error "bibtexify!: ~s ~s ~s~%" path bibs known)
   (let* ((aux (replace-ext path ".aux"))
          (refs (citations aux))
          (new (cons refs (shasum bibs))))
