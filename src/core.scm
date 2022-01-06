@@ -403,10 +403,12 @@
         (gmk-error "no toolchain: ~a" name)))))
 
 (define (shasum files)
-  (with-input-from-port
-    (apply open-pipe* OPEN_READ "shasum" files)
-    (lambda ()
-      (unfold eof-object? identity (lambda x (read-line)) (read-line)))))
+  (and (list? files)
+       (not (null? files))
+       (with-input-from-port
+         (apply open-pipe* OPEN_READ "shasum" files)
+         (lambda ()
+           (unfold eof-object? identity (lambda x (read-line)) (read-line))))))
 
 (define (replace-ext path ext) (string-append (drop-ext path) ext))
 
